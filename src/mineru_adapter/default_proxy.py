@@ -5,7 +5,7 @@ import io
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, TypeAlias
+from typing import Any, Awaitable, Callable, Mapping, TypeAlias
 
 import httpx
 from pypdf import PdfReader
@@ -118,7 +118,7 @@ def create_app(
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
     async def proxy(path: str, request: Request) -> Response:
         target_url = build_target_url(app_settings.mineru_api_base_url, path, str(request.url.query))
-        headers = filter_headers(dict(request.headers))
+        headers = filter_headers(request.headers)
 
         body: bytes | None = None
         data: list[tuple[str, str]] | None = None
@@ -175,7 +175,7 @@ def create_app(
 
 
 def buffered_proxy_response(upstream_response: httpx.Response, decision: ProxyDecision) -> Response:
-    response_headers = filter_headers(dict(upstream_response.headers))
+    response_headers = filter_headers(upstream_response.headers)
     response_headers.update(proxy_decision_headers(decision))
     return Response(
         content=upstream_response.content,
@@ -186,7 +186,7 @@ def buffered_proxy_response(upstream_response: httpx.Response, decision: ProxyDe
 
 
 def streaming_proxy_response(upstream_response: httpx.Response, decision: ProxyDecision) -> StreamingResponse:
-    response_headers = filter_headers(dict(upstream_response.headers))
+    response_headers = filter_headers(upstream_response.headers)
     response_headers.update(proxy_decision_headers(decision))
     return StreamingResponse(
         upstream_response.aiter_raw(),
@@ -376,7 +376,7 @@ async def forward_to_mineru_stream(
     return await client.send(request, stream=True)
 
 
-def filter_headers(headers: dict[str, str]) -> dict[str, str]:
+def filter_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return {key: value for key, value in headers.items() if key.lower() not in HOP_BY_HOP_HEADERS}
 
 

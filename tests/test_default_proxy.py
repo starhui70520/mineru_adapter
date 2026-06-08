@@ -7,7 +7,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 import mineru_adapter.default_proxy as default_proxy
-from mineru_adapter.default_proxy import DefaultProxySettings, apply_default_fields, create_app
+from mineru_adapter.default_proxy import DefaultProxySettings, apply_default_fields, create_app, filter_headers
 
 
 def test_apply_default_fields_adds_missing_defaults() -> None:
@@ -22,6 +22,22 @@ def test_apply_default_fields_adds_missing_defaults() -> None:
     ]
     assert decision.route == "default"
     assert decision.backend == "vlm-http-client"
+
+
+def test_filter_headers_accepts_mappings_without_hop_by_hop_headers() -> None:
+    headers = httpx.Headers(
+        {
+            "Content-Type": "application/json",
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked",
+            "X-Trace-Id": "abc",
+        }
+    )
+
+    assert filter_headers(headers) == {
+        "content-type": "application/json",
+        "x-trace-id": "abc",
+    }
 
 
 def test_apply_default_fields_routes_text_pdf_to_pipeline_without_server_url() -> None:
