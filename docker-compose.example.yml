@@ -1,14 +1,55 @@
 services:
+  official-mineru:
+    image: official-mineru:latest
+    container_name: official-mineru
+    restart: always
+    environment:
+      MINERU_MODEL_SOURCE: local
+      MINERU_DEVICE_MODE: cpu
+    entrypoint: mineru-api
+    command:
+      --host 0.0.0.0
+      --port 8000
+      --allow-public-http-client
+    expose:
+      - "8000"
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+
   mineru-adapter:
     build: .
-    ports:
-      - "18000:18000"
+    container_name: mineru-adapter
+    restart: always
     environment:
       UPSTREAM_BASE_URL: "http://host.docker.internal:8000"
       UPSTREAM_MODEL: "vl-model"
-      REQUEST_TIMEOUT: "120"
+      REQUEST_TIMEOUT: "180"
       DROP_UNSUPPORTED_PARAMS: "true"
       STRIP_REASONING: "true"
       ADAPTER_DEBUG_DIR: "/var/log/mineru-adapter/debug"
     volumes:
       - ./debug:/var/log/mineru-adapter/debug
+    expose:
+      - "18000"
+
+  mineru-default-proxy:
+    build: .
+    container_name: mineru-default-proxy
+    restart: always
+    command:
+      python -m uvicorn mineru_adapter.default_proxy:app --host 0.0.0.0 --port 8000
+    ports:
+      - "31000:8000"
+    environment:
+      MINERU_API_BASE_URL: "http://official-mineru:8000"
+      DEFAULT_BACKEND: "vlm-http-client"
+      DEFAULT_SERVER_URL: "http://mineru-adapter:18000"
+      PROXY_REQUEST_TIMEOUT: "600"
+      FORCE_DEFAULTS: "false"
+    depends_on:
+      - official-mineru
+      - mineru-adapter

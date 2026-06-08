@@ -13,6 +13,7 @@ MinerU Adapter 是一个轻量级 OpenAI-compatible 代理服务，用于让 Min
 - [快速开始](#快速开始)
 - [Docker](#docker)
 - [配置项](#配置项)
+- [默认参数代理](#默认参数代理)
 - [接入 MinerU](#接入-mineru)
 - [API](#api)
 - [输出形状](#输出形状)
@@ -28,15 +29,19 @@ MinerU Adapter 是一个轻量级 OpenAI-compatible 代理服务，用于让 Min
 - 将 layout type 映射到 MinerU 支持的 block type 集合。
 - 清理文本、表格、公式任务中的 Markdown code fence。
 - 支持 debug 目录记录请求、上游原始响应和 adapter 改写结果。
+- 提供默认参数代理，自动为 MinerU `/file_parse` 请求补齐 `backend` 和 `server_url`。
 
 ## 工作方式
 
 ```mermaid
 flowchart LR
-  A["MinerU vlm-http-client / hybrid-http-client"] --> B["MinerU Adapter"]
+  A["Client"] --> P["MinerU Default Proxy"]
+  P --> M["MinerU API"]
+  M --> B["MinerU Adapter"]
   B --> C["OpenAI-compatible multimodal endpoint"]
   C --> B
-  B --> D["MinerU-compatible response shape"]
+  B --> M
+  M --> P
 ```
 
 adapter 只处理协议和输出形状：
@@ -84,9 +89,27 @@ curl http://127.0.0.1:18000/health
 docker compose -f docker-compose.example.yml up --build
 ```
 
-如果上游多模态服务不在宿主机本地，请修改 `docker-compose.example.yml` 中的 `UPSTREAM_BASE_URL`。
+`docker-compose.example.yml` 默认启动三个服务：
+
+| 服务 | 作用 |
+| --- | --- |
+| `official-mineru` | MinerU API，内部监听 `8000` |
+| `mineru-adapter` | OpenAI-compatible 多模态适配层，内部监听 `18000` |
+| `mineru-default-proxy` | 对外暴露 `31000`，自动补齐 MinerU http-client 参数 |
+
+如果上游多模态服务不在宿主机本地，请修改 `mineru-adapter` 的 `UPSTREAM_BASE_URL`。
+
+部署后，业务系统继续请求：
+
+```text
+http://<host>:31000/file_parse
+```
+
+不需要在每个请求里传 `server_url`。
 
 ## 配置项
+
+Adapter 配置：
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -96,6 +119,32 @@ docker compose -f docker-compose.example.yml up --build
 | `DROP_UNSUPPORTED_PARAMS` | `true` | 是否丢弃 MinerU/vLLM 专有参数 |
 | `STRIP_REASONING` | `true` | 是否从响应中移除 reasoning 字段 |
 | `ADAPTER_DEBUG_DIR` | 空 | 调试记录输出目录 |
+
+默认参数代理配置：
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `MINERU_API_BASE_URL` | `http://official-mineru:8000` | 代理转发到的 MinerU API 地址 |
+| `DEFAULT_BACKEND` | `vlm-http-client` | 请求未传 `backend` 时自动补的 backend |
+| `DEFAULT_SERVER_URL` | `http://mineru-adapter:18000` | 请求未传 `server_url` 时自动补的 adapter 地址 |
+| `PROXY_REQUEST_TIMEOUT` | `600` | 代理等待 MinerU API 的超时时间，单位秒 |
+| `FORCE_DEFAULTS` | `false` | 是否强制覆盖请求里已有的 `backend/server_url` |
+
+## 默认参数代理
+
+默认参数代理只对 `POST /file_parse` 的 multipart 请求做字段补齐。默认行为是：
+
+- 如果请求没有 `backend`，补 `DEFAULT_BACKEND`。
+- 如果请求没有 `server_url`，补 `DEFAULT_SERVER_URL`。
+- 如果请求已经带了 `backend/server_url`，默认保留调用方传入的值。
+
+如果需要强制所有请求都走 adapter，可以设置：
+
+```yaml
+FORCE_DEFAULTS: "true"
+```
+
+这样即使调用方传了 `pipeline` 或其他 `server_url`，也会被代理覆盖。
 
 ## 接入 MinerU
 
@@ -112,7 +161,9 @@ backend=hybrid-http-client
 server_url=http://<adapter-host>:18000
 ```
 
-也可以使用 `vlm-http-client`。一般建议先试 `hybrid-http-client`，让 MinerU 保留自己的结构化后处理能力，同时把 VLM 调用转发给外部多模态模型服务。
+如果使用默认参数代理，请求方可以不传 `backend/server_url`，代理会自动补齐。也可以直接请求 MinerU API 并显式传这两个字段。
+
+`vlm-http-client` 和 `hybrid-http-client` 都支持。`vlm-http-client` 更适合减少 MinerU 本地 GPU 占用；`hybrid-http-client` 会保留更多 MinerU 本地结构化处理能力。
 
 如果目标是尽量减少 MinerU 容器的 GPU 占用，可以让 MinerU 容器不挂 GPU，或设置：
 
@@ -180,6 +231,7 @@ python scripts/mineruclient_layout_smoke.py --adapter-url http://127.0.0.1:18000
 ├── src/mineru_adapter
 │   ├── api.py
 │   ├── config.py
+│   ├── default_proxy.py
 │   ├── layout.py
 │   ├── messages.py
 │   └── proxy.py

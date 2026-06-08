@@ -13,6 +13,7 @@ It is not a MinerU output simulator. The upstream multimodal model is responsibl
 - [Quick Start](#quick-start)
 - [Docker](#docker)
 - [Configuration](#configuration)
+- [Default Parameter Proxy](#default-parameter-proxy)
 - [MinerU Integration](#mineru-integration)
 - [API](#api)
 - [Response Shape](#response-shape)
@@ -28,15 +29,19 @@ It is not a MinerU output simulator. The upstream multimodal model is responsibl
 - Maps layout labels into MinerU-supported block types.
 - Strips Markdown code fences from text, table, and formula outputs.
 - Optionally writes debug records for requests, raw upstream responses, and rewritten responses.
+- Provides a default parameter proxy that injects `backend` and `server_url` for MinerU `/file_parse` requests.
 
 ## How It Works
 
 ```mermaid
 flowchart LR
-  A["MinerU vlm-http-client / hybrid-http-client"] --> B["MinerU Adapter"]
+  A["Client"] --> P["MinerU Default Proxy"]
+  P --> M["MinerU API"]
+  M --> B["MinerU Adapter"]
   B --> C["OpenAI-compatible multimodal endpoint"]
   C --> B
-  B --> D["MinerU-compatible response shape"]
+  B --> M
+  M --> P
 ```
 
 The adapter only handles protocol and response shaping:
@@ -84,9 +89,27 @@ curl http://127.0.0.1:18000/health
 docker compose -f docker-compose.example.yml up --build
 ```
 
-If the upstream multimodal service is not running on the host machine, update `UPSTREAM_BASE_URL` in `docker-compose.example.yml`.
+`docker-compose.example.yml` starts three services by default:
+
+| Service | Purpose |
+| --- | --- |
+| `official-mineru` | MinerU API, listening on internal port `8000` |
+| `mineru-adapter` | OpenAI-compatible multimodal adapter, listening on internal port `18000` |
+| `mineru-default-proxy` | Public entrypoint on `31000`; injects MinerU http-client parameters |
+
+If the upstream multimodal service is not running on the host machine, update `UPSTREAM_BASE_URL` for `mineru-adapter`.
+
+After deployment, clients can keep calling:
+
+```text
+http://<host>:31000/file_parse
+```
+
+They do not need to send `server_url` on each request.
 
 ## Configuration
+
+Adapter configuration:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -96,6 +119,32 @@ If the upstream multimodal service is not running on the host machine, update `U
 | `DROP_UNSUPPORTED_PARAMS` | `true` | Drop MinerU/vLLM-specific request fields |
 | `STRIP_REASONING` | `true` | Remove reasoning fields from responses |
 | `ADAPTER_DEBUG_DIR` | empty | Directory for debug records |
+
+Default proxy configuration:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MINERU_API_BASE_URL` | `http://official-mineru:8000` | MinerU API target URL |
+| `DEFAULT_BACKEND` | `vlm-http-client` | Injected backend when the request does not include `backend` |
+| `DEFAULT_SERVER_URL` | `http://mineru-adapter:18000` | Injected adapter URL when the request does not include `server_url` |
+| `PROXY_REQUEST_TIMEOUT` | `600` | Timeout for MinerU API requests in seconds |
+| `FORCE_DEFAULTS` | `false` | Force override existing `backend/server_url` request fields |
+
+## Default Parameter Proxy
+
+The default parameter proxy only injects fields for multipart `POST /file_parse` requests. By default:
+
+- If the request has no `backend`, it injects `DEFAULT_BACKEND`.
+- If the request has no `server_url`, it injects `DEFAULT_SERVER_URL`.
+- If the request already includes `backend/server_url`, the caller-provided values are preserved.
+
+To force every request through the adapter, set:
+
+```yaml
+FORCE_DEFAULTS: "true"
+```
+
+With this option enabled, even caller-provided `pipeline` or custom `server_url` values are replaced by the proxy defaults.
 
 ## MinerU Integration
 
@@ -112,7 +161,9 @@ backend=hybrid-http-client
 server_url=http://<adapter-host>:18000
 ```
 
-`vlm-http-client` is also supported. `hybrid-http-client` is usually a good first choice because MinerU keeps its structured post-processing while forwarding VLM calls to the external multimodal endpoint.
+When using the default parameter proxy, clients can omit `backend/server_url`; the proxy injects them automatically. You can also call MinerU API directly and pass both fields explicitly.
+
+Both `vlm-http-client` and `hybrid-http-client` are supported. `vlm-http-client` is cleaner for reducing MinerU-side GPU usage; `hybrid-http-client` keeps more of MinerU's local structured processing.
 
 To minimize MinerU GPU usage, run MinerU without GPU access or set:
 
@@ -180,6 +231,7 @@ python scripts/mineruclient_layout_smoke.py --adapter-url http://127.0.0.1:18000
 ├── src/mineru_adapter
 │   ├── api.py
 │   ├── config.py
+│   ├── default_proxy.py
 │   ├── layout.py
 │   ├── messages.py
 │   └── proxy.py
