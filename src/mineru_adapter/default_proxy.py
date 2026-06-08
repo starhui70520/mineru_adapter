@@ -59,6 +59,7 @@ class DefaultProxySettings:
     request_timeout: float = 600.0
     force_defaults: bool = False
     auto_text_pdf_routing: bool = True
+    force_text_pdf_routing: bool = False
     text_pdf_backend: str = "pipeline"
     text_pdf_min_chars: int = 120
     text_pdf_scan_pages: int = 3
@@ -72,6 +73,7 @@ class DefaultProxySettings:
             request_timeout=float(os.getenv("PROXY_REQUEST_TIMEOUT", "600")),
             force_defaults=_bool_env("FORCE_DEFAULTS", False),
             auto_text_pdf_routing=_bool_env("AUTO_TEXT_PDF_ROUTING", True),
+            force_text_pdf_routing=_bool_env("FORCE_TEXT_PDF_ROUTING", False),
             text_pdf_backend=os.getenv("TEXT_PDF_BACKEND", "pipeline"),
             text_pdf_min_chars=int(os.getenv("TEXT_PDF_MIN_CHARS", "120")),
             text_pdf_scan_pages=int(os.getenv("TEXT_PDF_SCAN_PAGES", "3")),
@@ -107,6 +109,7 @@ def create_app(
             "default_server_url": app_settings.default_server_url,
             "force_defaults": app_settings.force_defaults,
             "auto_text_pdf_routing": app_settings.auto_text_pdf_routing,
+            "force_text_pdf_routing": app_settings.force_text_pdf_routing,
             "text_pdf_backend": app_settings.text_pdf_backend,
             "text_pdf_min_chars": app_settings.text_pdf_min_chars,
             "text_pdf_scan_pages": app_settings.text_pdf_scan_pages,
@@ -223,7 +226,9 @@ async def build_multipart_payload(
             fields.append((key, str(value)))
 
     existing = {key for key, _ in fields}
-    should_check_text_pdf = settings.auto_text_pdf_routing and (settings.force_defaults or "backend" not in existing)
+    should_check_text_pdf = settings.auto_text_pdf_routing and (
+        settings.force_defaults or settings.force_text_pdf_routing or "backend" not in existing
+    )
 
     for key, value in items:
         if isinstance(value, UploadFile):
@@ -279,13 +284,21 @@ def apply_default_fields(
         result = [(key, value) for key, value in result if key not in {"backend", "server_url"}]
         existing = {key for key, _ in result}
         decision.route = "forced-defaults"
+    elif settings.auto_text_pdf_routing and settings.force_text_pdf_routing and text_pdf_detected:
+        result = [(key, value) for key, value in result if key not in {"backend", "server_url"}]
+        existing = {key for key, _ in result}
+        decision.route = "forced-text-pdf"
 
     if "backend" not in existing:
-        backend = settings.text_pdf_backend if settings.auto_text_pdf_routing and text_pdf_detected else settings.default_backend
+        use_text_pdf_backend = settings.auto_text_pdf_routing and text_pdf_detected
+        backend = settings.text_pdf_backend if use_text_pdf_backend else settings.default_backend
         result.append(("backend", backend))
         existing.add("backend")
         decision.backend = backend
-        decision.route = "text-pdf" if settings.auto_text_pdf_routing and text_pdf_detected else "default"
+        if use_text_pdf_backend:
+            decision.route = "forced-text-pdf" if decision.route == "forced-text-pdf" else "text-pdf"
+        else:
+            decision.route = "default"
     else:
         backend = _last_field_value(result, "backend") or settings.default_backend
         decision.backend = backend

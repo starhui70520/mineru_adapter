@@ -99,6 +99,35 @@ def test_apply_default_fields_can_force_defaults() -> None:
     assert decision.backend == "vlm-http-client"
 
 
+def test_apply_default_fields_can_force_text_pdf_routing() -> None:
+    settings = DefaultProxySettings(
+        default_backend="vlm-http-client",
+        default_server_url="http://adapter:18000",
+        force_text_pdf_routing=True,
+    )
+
+    fields, decision = apply_default_fields(
+        [
+            ("backend", "vlm-http-client"),
+            ("server_url", "http://custom:18000"),
+            ("return_md", "true"),
+        ],
+        settings,
+        text_pdf_detected=True,
+        text_pdf_checked=True,
+    )
+
+    assert fields == [
+        ("return_md", "true"),
+        ("backend", "pipeline"),
+    ]
+    assert decision.route == "forced-text-pdf"
+    assert decision.backend == "pipeline"
+    assert decision.server_url is None
+    assert decision.text_pdf_detected is True
+    assert decision.text_pdf_checked is True
+
+
 def test_default_proxy_injects_multipart_defaults() -> None:
     captured: dict[str, Any] = {}
 
@@ -185,6 +214,49 @@ def test_default_proxy_skips_text_pdf_detection_when_backend_is_explicit(monkeyp
     assert response.headers["x-mineru-proxy-route"] == "explicit-backend"
     assert response.headers["x-mineru-proxy-text-pdf-checked"] == "false"
     assert captured["data"] == {"backend": "pipeline"}
+
+
+def test_default_proxy_force_text_pdf_routing_checks_explicit_backend(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def detect_text_pdf(*args: Any, **kwargs: Any) -> bool:
+        return True
+
+    async def fake_forwarder(
+        method: str,
+        target_url: str,
+        headers: dict[str, str],
+        body: bytes | None,
+        data: dict[str, str | list[str]] | None,
+        files: list[tuple[str, tuple[str, Any, str]]] | None,
+        settings: DefaultProxySettings,
+    ) -> httpx.Response:
+        captured["data"] = data
+        captured["files"] = files
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr(default_proxy, "_pdf_has_text_layer", detect_text_pdf)
+    settings = DefaultProxySettings(
+        default_backend="vlm-http-client",
+        default_server_url="http://mineru-adapter:18000",
+        force_text_pdf_routing=True,
+    )
+    client = TestClient(create_app(settings, forwarder=fake_forwarder))
+
+    response = client.post(
+        "/file_parse",
+        data={"backend": "vlm-http-client", "server_url": "http://custom:18000", "return_md": "true"},
+        files={"files": ("sample.pdf", b"%PDF", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-mineru-proxy-route"] == "forced-text-pdf"
+    assert response.headers["x-mineru-proxy-backend"] == "pipeline"
+    assert "x-mineru-proxy-server-url" not in response.headers
+    assert response.headers["x-mineru-proxy-text-pdf"] == "true"
+    assert response.headers["x-mineru-proxy-text-pdf-checked"] == "true"
+    assert captured["data"] == {"return_md": "true", "backend": "pipeline"}
+    assert captured["files"][0][1][0] == "sample.pdf"
 
 
 def test_default_proxy_streams_upstream_response(monkeypatch) -> None:

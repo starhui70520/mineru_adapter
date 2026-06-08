@@ -62,6 +62,7 @@ services:
       PROXY_REQUEST_TIMEOUT: "600"
       FORCE_DEFAULTS: "false"
       AUTO_TEXT_PDF_ROUTING: "true"
+      FORCE_TEXT_PDF_ROUTING: "false"
       TEXT_PDF_BACKEND: "pipeline"
       TEXT_PDF_MIN_CHARS: "120"
       TEXT_PDF_SCAN_PAGES: "3"

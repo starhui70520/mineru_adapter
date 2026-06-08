@@ -145,6 +145,7 @@ Adapter 配置：
 | `PROXY_REQUEST_TIMEOUT` | `600` | 代理等待 MinerU API 的超时时间，单位秒 |
 | `FORCE_DEFAULTS` | `false` | 是否强制覆盖请求里已有的 `backend/server_url` |
 | `AUTO_TEXT_PDF_ROUTING` | `true` | 是否检测文本层 PDF，并在请求未显式传 `backend` 时改走 `TEXT_PDF_BACKEND` |
+| `FORCE_TEXT_PDF_ROUTING` | `false` | 即使请求已显式传 `backend/server_url`，检测到文本层 PDF 时也强制改走 `TEXT_PDF_BACKEND` |
 | `TEXT_PDF_BACKEND` | `pipeline` | 文本层 PDF 自动路由使用的 MinerU backend |
 | `TEXT_PDF_MIN_CHARS` | `120` | 前几页抽取文本达到多少非空白字符后判定为文本层 PDF |
 | `TEXT_PDF_SCAN_PAGES` | `3` | 文本层检测扫描的最大页数 |
@@ -157,6 +158,7 @@ Adapter 配置：
 - 如果请求没有 `server_url`，补 `DEFAULT_SERVER_URL`。
 - 如果请求已经带了 `backend/server_url`，默认保留调用方传入的值。
 - 如果启用 `AUTO_TEXT_PDF_ROUTING` 且请求没有显式 `backend`，文本层 PDF 会自动改走 `TEXT_PDF_BACKEND`，并跳过 adapter VLM。
+- 如果调用方固定传 `backend=vlm-http-client`，可以启用 `FORCE_TEXT_PDF_ROUTING`，仅让文本层 PDF 强制改走 `TEXT_PDF_BACKEND`，非文本 PDF 仍保留原请求参数。
 
 代理响应会附带路由诊断响应头：
 
@@ -166,7 +168,7 @@ Adapter 配置：
 | `x-mineru-proxy-backend` | 最终传给 MinerU 的 backend |
 | `x-mineru-proxy-server-url` | 最终传给 MinerU 的 server_url；仅 http-client backend 存在 |
 | `x-mineru-proxy-text-pdf` | 是否判定为文本层 PDF |
-| `x-mineru-proxy-text-pdf-checked` | 是否执行了文本层检测；显式传 `backend` 时默认不会检测 |
+| `x-mineru-proxy-text-pdf-checked` | 是否执行了文本层检测；显式传 `backend` 时默认不会检测，除非启用 `FORCE_TEXT_PDF_ROUTING` |
 
 如果需要强制所有请求都走 adapter，可以设置：
 

@@ -145,6 +145,7 @@ Default proxy configuration:
 | `PROXY_REQUEST_TIMEOUT` | `600` | Timeout for MinerU API requests in seconds |
 | `FORCE_DEFAULTS` | `false` | Force override existing `backend/server_url` request fields |
 | `AUTO_TEXT_PDF_ROUTING` | `true` | Detect text-layer PDFs and route them to `TEXT_PDF_BACKEND` when the request does not explicitly include `backend` |
+| `FORCE_TEXT_PDF_ROUTING` | `false` | Force text-layer PDFs to `TEXT_PDF_BACKEND` even when the request explicitly includes `backend/server_url` |
 | `TEXT_PDF_BACKEND` | `pipeline` | MinerU backend used for text-layer PDF auto routing |
 | `TEXT_PDF_MIN_CHARS` | `120` | Minimum non-whitespace characters from sampled pages to classify a PDF as text-layer |
 | `TEXT_PDF_SCAN_PAGES` | `3` | Maximum pages scanned for text-layer detection |
@@ -157,6 +158,7 @@ The default parameter proxy only injects fields for multipart `POST /file_parse`
 - If the request has no `server_url`, it injects `DEFAULT_SERVER_URL`.
 - If the request already includes `backend/server_url`, the caller-provided values are preserved.
 - If `AUTO_TEXT_PDF_ROUTING` is enabled and the request does not explicitly include `backend`, text-layer PDFs are routed to `TEXT_PDF_BACKEND` and skip the adapter VLM.
+- If callers always send `backend=vlm-http-client`, enable `FORCE_TEXT_PDF_ROUTING` to route only text-layer PDFs to `TEXT_PDF_BACKEND` while preserving non-text PDF request parameters.
 
 The proxy adds routing diagnostic response headers:
 
@@ -166,7 +168,7 @@ The proxy adds routing diagnostic response headers:
 | `x-mineru-proxy-backend` | Final backend sent to MinerU |
 | `x-mineru-proxy-server-url` | Final server_url sent to MinerU; only present for http-client backends |
 | `x-mineru-proxy-text-pdf` | Whether the file was classified as a text-layer PDF |
-| `x-mineru-proxy-text-pdf-checked` | Whether text-layer detection ran; explicit `backend` requests skip it by default |
+| `x-mineru-proxy-text-pdf-checked` | Whether text-layer detection ran; explicit `backend` requests skip it by default unless `FORCE_TEXT_PDF_ROUTING` is enabled |
 
 To force every request through the adapter, set:
 
