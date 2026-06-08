@@ -35,9 +35,13 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
     image_size = first_image_size(messages)
 
     if settings.drop_unsupported_params:
-        payload = {key: copy.deepcopy(value) for key, value in request_body.items() if key in ALLOWED_OPENAI_FIELDS}
+        payload = {
+            key: copy.deepcopy(value)
+            for key, value in request_body.items()
+            if key in ALLOWED_OPENAI_FIELDS and key != "messages"
+        }
     else:
-        payload = copy.deepcopy(request_body)
+        payload = {key: copy.deepcopy(value) for key, value in request_body.items() if key != "messages"}
 
     payload["model"] = settings.upstream_model
     outbound_messages = rewrite_messages_for_task(messages, task)
