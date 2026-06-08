@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -16,7 +17,14 @@ UpstreamCaller = Callable[[dict[str, Any], Settings], Awaitable[tuple[dict[str, 
 
 def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller = call_upstream) -> FastAPI:
     app_settings = settings or Settings.from_env()
-    app = FastAPI(title="MinerU Adapter", version="0.1.0")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        async with httpx.AsyncClient(timeout=app_settings.request_timeout) as client:
+            app.state.upstream_client = client
+            yield
+
+    app = FastAPI(title="MinerU Adapter", version="0.1.0", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -47,7 +55,14 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
 
         try:
             outbound_payload, task, image_size = build_upstream_payload(request_body, app_settings)
-            upstream_response, elapsed_seconds = await upstream_caller(outbound_payload, app_settings)
+            if upstream_caller is call_upstream:
+                upstream_response, elapsed_seconds = await call_upstream(
+                    outbound_payload,
+                    app_settings,
+                    client=getattr(request.app.state, "upstream_client", None),
+                )
+            else:
+                upstream_response, elapsed_seconds = await upstream_caller(outbound_payload, app_settings)
             rewritten_response, raw_content, parse_error = rewrite_upstream_response(
                 upstream_response,
                 task,

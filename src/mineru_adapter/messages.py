@@ -135,6 +135,33 @@ def first_image_size(messages: list[dict[str, Any]]) -> tuple[int, int] | None:
     return None
 
 
+def downsample_data_url_images(messages: list[dict[str, Any]], max_side: int) -> tuple[list[dict[str, Any]], tuple[int, int] | None]:
+    rewritten = copy.deepcopy(messages)
+    first_size: tuple[int, int] | None = None
+    if max_side <= 0:
+        return rewritten, first_image_size(rewritten)
+
+    for message in rewritten:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "image_url":
+                continue
+            image_url = part.get("image_url")
+            if isinstance(image_url, str):
+                resized_url, size = _downsample_data_url(image_url, max_side)
+                part["image_url"] = resized_url
+            elif isinstance(image_url, dict) and isinstance(image_url.get("url"), str):
+                resized_url, size = _downsample_data_url(image_url["url"], max_side)
+                image_url["url"] = resized_url
+            else:
+                size = None
+            if first_size is None and size:
+                first_size = size
+    return rewritten, first_size
+
+
 def _iter_image_urls(messages: list[dict[str, Any]]):
     for message in messages:
         content = message.get("content")
@@ -163,3 +190,27 @@ def _image_size_from_data_url(url: str) -> tuple[int, int] | None:
             return image.size
     except Exception:
         return None
+
+
+def _downsample_data_url(url: str, max_side: int) -> tuple[str, tuple[int, int] | None]:
+    match = _DATA_URL_RE.match(url.strip())
+    if not match:
+        return url, None
+    try:
+        raw = base64.b64decode(match.group("data"), validate=False)
+        with Image.open(io.BytesIO(raw)) as image:
+            image.load()
+            width, height = image.size
+            if width <= 0 or height <= 0:
+                return url, None
+            if max(width, height) <= max_side:
+                return url, (width, height)
+
+            resized = image.copy()
+            resized.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            resized.save(output, format="PNG", optimize=True)
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/png;base64,{encoded}", resized.size
+    except Exception:
+        return url, None

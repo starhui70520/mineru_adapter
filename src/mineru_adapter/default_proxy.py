@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import io
 import os
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, TypeAlias
 
 import httpx
+from pypdf import PdfReader
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
@@ -30,6 +33,7 @@ HOP_BY_HOP_HEADERS = {
 FormDataValue: TypeAlias = str | list[str]
 FormData: TypeAlias = dict[str, FormDataValue]
 
+
 def _bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -44,6 +48,10 @@ class DefaultProxySettings:
     default_server_url: str = "http://mineru-adapter:18000"
     request_timeout: float = 600.0
     force_defaults: bool = False
+    auto_text_pdf_routing: bool = True
+    text_pdf_backend: str = "pipeline"
+    text_pdf_min_chars: int = 120
+    text_pdf_scan_pages: int = 3
 
     @classmethod
     def from_env(cls) -> "DefaultProxySettings":
@@ -53,6 +61,10 @@ class DefaultProxySettings:
             default_server_url=os.getenv("DEFAULT_SERVER_URL", "http://mineru-adapter:18000"),
             request_timeout=float(os.getenv("PROXY_REQUEST_TIMEOUT", "600")),
             force_defaults=_bool_env("FORCE_DEFAULTS", False),
+            auto_text_pdf_routing=_bool_env("AUTO_TEXT_PDF_ROUTING", True),
+            text_pdf_backend=os.getenv("TEXT_PDF_BACKEND", "pipeline"),
+            text_pdf_min_chars=int(os.getenv("TEXT_PDF_MIN_CHARS", "120")),
+            text_pdf_scan_pages=int(os.getenv("TEXT_PDF_SCAN_PAGES", "3")),
         )
 
 
@@ -67,8 +79,14 @@ def create_app(
     forwarder: Forwarder | None = None,
 ) -> FastAPI:
     app_settings = settings or DefaultProxySettings.from_env()
-    app_forwarder = forwarder or forward_to_mineru
-    app = FastAPI(title="MinerU Default Proxy", version="0.1.0")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        async with httpx.AsyncClient(timeout=app_settings.request_timeout) as client:
+            app.state.mineru_client = client
+            yield
+
+    app = FastAPI(title="MinerU Default Proxy", version="0.1.0", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -78,6 +96,8 @@ def create_app(
             "default_backend": app_settings.default_backend,
             "default_server_url": app_settings.default_server_url,
             "force_defaults": app_settings.force_defaults,
+            "auto_text_pdf_routing": app_settings.auto_text_pdf_routing,
+            "text_pdf_backend": app_settings.text_pdf_backend,
         }
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
@@ -96,15 +116,27 @@ def create_app(
             body = await request.body()
 
         try:
-            upstream_response = await app_forwarder(
-                request.method,
-                target_url,
-                headers,
-                body,
-                data,
-                files,
-                app_settings,
-            )
+            if forwarder is None:
+                upstream_response = await forward_to_mineru(
+                    request.method,
+                    target_url,
+                    headers,
+                    body,
+                    data,
+                    files,
+                    app_settings,
+                    client=getattr(request.app.state, "mineru_client", None),
+                )
+            else:
+                upstream_response = await forwarder(
+                    request.method,
+                    target_url,
+                    headers,
+                    body,
+                    data,
+                    files,
+                    app_settings,
+                )
         except httpx.RequestError as exc:
             raise HTTPException(status_code=502, detail=f"Failed to reach MinerU API: {exc}") from exc
 
@@ -138,27 +170,44 @@ async def build_multipart_payload(
     form = await request.form()
     fields: list[tuple[str, str]] = []
     files: list[tuple[str, tuple[str, Any, str]]] = []
+    pdf_uploads = 0
+    text_pdf_uploads = 0
 
     for key, value in form.multi_items():
         if isinstance(value, UploadFile):
-            await value.seek(0)
+            filename = value.filename or "upload"
+            content_type = value.content_type or "application/octet-stream"
+            if settings.auto_text_pdf_routing and _is_pdf_upload(filename, content_type):
+                file_bytes = await value.read()
+                pdf_uploads += 1
+                if _pdf_has_text_layer(file_bytes, settings):
+                    text_pdf_uploads += 1
+                file_body: Any = file_bytes
+            else:
+                await value.seek(0)
+                file_body = value.file
             files.append(
                 (
                     key,
                     (
-                        value.filename or "upload",
-                        value.file,
-                        value.content_type or "application/octet-stream",
+                        filename,
+                        file_body,
+                        content_type,
                     ),
                 )
             )
         else:
             fields.append((key, str(value)))
 
-    return fields_to_httpx_data(apply_default_fields(fields, settings)), files
+    text_pdf_detected = pdf_uploads > 0 and pdf_uploads == text_pdf_uploads
+    return fields_to_httpx_data(apply_default_fields(fields, settings, text_pdf_detected=text_pdf_detected)), files
 
 
-def apply_default_fields(fields: list[tuple[str, str]], settings: DefaultProxySettings) -> list[tuple[str, str]]:
+def apply_default_fields(
+    fields: list[tuple[str, str]],
+    settings: DefaultProxySettings,
+    text_pdf_detected: bool = False,
+) -> list[tuple[str, str]]:
     result = list(fields)
     existing = {key for key, _ in result}
 
@@ -167,8 +216,13 @@ def apply_default_fields(fields: list[tuple[str, str]], settings: DefaultProxySe
         existing = {key for key, _ in result}
 
     if "backend" not in existing:
-        result.append(("backend", settings.default_backend))
-    if "server_url" not in existing:
+        backend = settings.text_pdf_backend if settings.auto_text_pdf_routing and text_pdf_detected else settings.default_backend
+        result.append(("backend", backend))
+        existing.add("backend")
+    else:
+        backend = _last_field_value(result, "backend") or settings.default_backend
+
+    if _backend_requires_server_url(backend) and "server_url" not in existing:
         result.append(("server_url", settings.default_server_url))
     return result
 
@@ -194,20 +248,59 @@ async def forward_to_mineru(
     data: FormData | None,
     files: list[tuple[str, tuple[str, Any, str]]] | None,
     settings: DefaultProxySettings,
+    client: httpx.AsyncClient | None = None,
 ) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
-        return await client.request(
-            method,
-            target_url,
-            headers=headers,
-            content=body,
-            data=data,
-            files=files,
-        )
+    if client is None:
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as local_client:
+            return await local_client.request(
+                method,
+                target_url,
+                headers=headers,
+                content=body,
+                data=data,
+                files=files,
+            )
+    return await client.request(
+        method,
+        target_url,
+        headers=headers,
+        content=body,
+        data=data,
+        files=files,
+    )
 
 
 def filter_headers(headers: dict[str, str]) -> dict[str, str]:
     return {key: value for key, value in headers.items() if key.lower() not in HOP_BY_HOP_HEADERS}
+
+
+def _last_field_value(fields: list[tuple[str, str]], key: str) -> str | None:
+    for field_key, value in reversed(fields):
+        if field_key == key:
+            return value
+    return None
+
+
+def _backend_requires_server_url(backend: str) -> bool:
+    normalized = backend.strip().lower()
+    return normalized.endswith("http-client")
+
+
+def _is_pdf_upload(filename: str, content_type: str) -> bool:
+    return filename.lower().endswith(".pdf") or content_type.lower() == "application/pdf"
+
+
+def _pdf_has_text_layer(file_bytes: bytes, settings: DefaultProxySettings) -> bool:
+    if len(file_bytes) < 5 or not file_bytes.lstrip().startswith(b"%PDF"):
+        return False
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        pages = reader.pages[: max(1, settings.text_pdf_scan_pages)]
+        text = "\n".join(page.extract_text() or "" for page in pages)
+    except Exception:
+        return False
+    compact = "".join(text.split())
+    return len(compact) >= settings.text_pdf_min_chars
 
 
 app = create_app()

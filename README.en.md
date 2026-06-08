@@ -119,6 +119,12 @@ Adapter configuration:
 | `DROP_UNSUPPORTED_PARAMS` | `true` | Drop MinerU/vLLM-specific request fields |
 | `STRIP_REASONING` | `true` | Remove reasoning fields from responses |
 | `DISABLE_UPSTREAM_THINKING` | `true` | Send `chat_template_kwargs.enable_thinking=false` to upstream vLLM to disable thinking output from reasoning models such as Qwen3 |
+| `LAYOUT_MAX_TOKENS` | `1024` | Maximum output tokens for Layout Detection; larger upstream requests are capped |
+| `TEXT_MAX_TOKENS` | `2048` | Maximum output tokens for Text Recognition |
+| `TABLE_MAX_TOKENS` | `2048` | Maximum output tokens for Table Recognition |
+| `FORMULA_MAX_TOKENS` | `512` | Maximum output tokens for Formula Recognition |
+| `IMAGE_MAX_TOKENS` | `1024` | Maximum output tokens for Image Analysis |
+| `LAYOUT_MAX_IMAGE_SIDE` | `896` | Longest image side for Layout Detection downsampling; set `0` to disable |
 | `ADAPTER_DEBUG_DIR` | empty | Directory for debug records |
 
 Default proxy configuration:
@@ -130,6 +136,10 @@ Default proxy configuration:
 | `DEFAULT_SERVER_URL` | `http://mineru-adapter:18000` | Injected adapter URL when the request does not include `server_url` |
 | `PROXY_REQUEST_TIMEOUT` | `600` | Timeout for MinerU API requests in seconds |
 | `FORCE_DEFAULTS` | `false` | Force override existing `backend/server_url` request fields |
+| `AUTO_TEXT_PDF_ROUTING` | `true` | Detect text-layer PDFs and route them to `TEXT_PDF_BACKEND` when the request does not explicitly include `backend` |
+| `TEXT_PDF_BACKEND` | `pipeline` | MinerU backend used for text-layer PDF auto routing |
+| `TEXT_PDF_MIN_CHARS` | `120` | Minimum non-whitespace characters from sampled pages to classify a PDF as text-layer |
+| `TEXT_PDF_SCAN_PAGES` | `3` | Maximum pages scanned for text-layer detection |
 
 ## Default Parameter Proxy
 

@@ -31,9 +31,12 @@ services:
       DROP_UNSUPPORTED_PARAMS: "true"
       STRIP_REASONING: "true"
       DISABLE_UPSTREAM_THINKING: "true"
-      ADAPTER_DEBUG_DIR: "/var/log/mineru-adapter/debug"
-    volumes:
-      - ./debug:/var/log/mineru-adapter/debug
+      LAYOUT_MAX_TOKENS: "1024"
+      TEXT_MAX_TOKENS: "2048"
+      TABLE_MAX_TOKENS: "2048"
+      FORMULA_MAX_TOKENS: "512"
+      IMAGE_MAX_TOKENS: "1024"
+      LAYOUT_MAX_IMAGE_SIDE: "896"
     expose:
       - "18000"
 
@@ -51,6 +54,10 @@ services:
       DEFAULT_SERVER_URL: "http://mineru-adapter:18000"
       PROXY_REQUEST_TIMEOUT: "600"
       FORCE_DEFAULTS: "false"
+      AUTO_TEXT_PDF_ROUTING: "true"
+      TEXT_PDF_BACKEND: "pipeline"
+      TEXT_PDF_MIN_CHARS: "120"
+      TEXT_PDF_SCAN_PAGES: "3"
     depends_on:
       - official-mineru
       - mineru-adapter

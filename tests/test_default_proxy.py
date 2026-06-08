@@ -20,6 +20,25 @@ def test_apply_default_fields_adds_missing_defaults() -> None:
     ]
 
 
+def test_apply_default_fields_routes_text_pdf_to_pipeline_without_server_url() -> None:
+    settings = DefaultProxySettings(default_backend="vlm-http-client", default_server_url="http://adapter:18000")
+
+    fields = apply_default_fields([("return_md", "true")], settings, text_pdf_detected=True)
+
+    assert fields == [
+        ("return_md", "true"),
+        ("backend", "pipeline"),
+    ]
+
+
+def test_apply_default_fields_does_not_add_server_url_for_pipeline() -> None:
+    settings = DefaultProxySettings(default_backend="vlm-http-client", default_server_url="http://adapter:18000")
+
+    fields = apply_default_fields([("backend", "pipeline")], settings)
+
+    assert fields == [("backend", "pipeline")]
+
+
 def test_apply_default_fields_preserves_existing_values() -> None:
     settings = DefaultProxySettings(default_backend="vlm-http-client", default_server_url="http://adapter:18000")
 

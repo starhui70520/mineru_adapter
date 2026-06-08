@@ -119,6 +119,12 @@ Adapter 配置：
 | `DROP_UNSUPPORTED_PARAMS` | `true` | 是否丢弃 MinerU/vLLM 专有参数 |
 | `STRIP_REASONING` | `true` | 是否从响应中移除 reasoning 字段 |
 | `DISABLE_UPSTREAM_THINKING` | `true` | 是否向上游 vLLM 发送 `chat_template_kwargs.enable_thinking=false`，用于关闭 Qwen3 等 reasoning 模型的思考输出 |
+| `LAYOUT_MAX_TOKENS` | `1024` | Layout Detection 的最大输出 token，上游请求更大时会被压到该值 |
+| `TEXT_MAX_TOKENS` | `2048` | Text Recognition 的最大输出 token |
+| `TABLE_MAX_TOKENS` | `2048` | Table Recognition 的最大输出 token |
+| `FORMULA_MAX_TOKENS` | `512` | Formula Recognition 的最大输出 token |
+| `IMAGE_MAX_TOKENS` | `1024` | Image Analysis 的最大输出 token |
+| `LAYOUT_MAX_IMAGE_SIDE` | `896` | 仅对 Layout Detection 图片降采样的最长边；设为 `0` 可关闭 |
 | `ADAPTER_DEBUG_DIR` | 空 | 调试记录输出目录 |
 
 默认参数代理配置：
@@ -130,6 +136,10 @@ Adapter 配置：
 | `DEFAULT_SERVER_URL` | `http://mineru-adapter:18000` | 请求未传 `server_url` 时自动补的 adapter 地址 |
 | `PROXY_REQUEST_TIMEOUT` | `600` | 代理等待 MinerU API 的超时时间，单位秒 |
 | `FORCE_DEFAULTS` | `false` | 是否强制覆盖请求里已有的 `backend/server_url` |
+| `AUTO_TEXT_PDF_ROUTING` | `true` | 是否检测文本层 PDF，并在请求未显式传 `backend` 时改走 `TEXT_PDF_BACKEND` |
+| `TEXT_PDF_BACKEND` | `pipeline` | 文本层 PDF 自动路由使用的 MinerU backend |
+| `TEXT_PDF_MIN_CHARS` | `120` | 前几页抽取文本达到多少非空白字符后判定为文本层 PDF |
+| `TEXT_PDF_SCAN_PAGES` | `3` | 文本层检测扫描的最大页数 |
 
 ## 默认参数代理
 

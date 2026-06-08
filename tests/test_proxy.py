@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
 import copy
+import io
 
+from PIL import Image
 from mineru_adapter.config import Settings
 from mineru_adapter.messages import MinerUTask
 from mineru_adapter.proxy import build_upstream_payload, rewrite_upstream_response
@@ -52,6 +55,30 @@ def test_build_upstream_payload_can_keep_upstream_thinking_enabled() -> None:
     assert "chat_template_kwargs" not in payload
 
 
+def test_build_upstream_payload_caps_layout_tokens() -> None:
+    body = _request_body()
+    body["max_tokens"] = 4096
+
+    payload, _, _ = build_upstream_payload(body, Settings(upstream_model="vl-model", layout_max_tokens=512))
+
+    assert payload["max_tokens"] == 512
+
+
+def test_build_upstream_payload_downsamples_layout_images() -> None:
+    body = _request_body()
+    body["messages"][0]["content"].insert(0, {"type": "image_url", "image_url": {"url": _png_data_url(1200, 600)}})
+
+    payload, task, image_size = build_upstream_payload(
+        body,
+        Settings(upstream_model="vl-model", layout_max_image_side=600),
+    )
+
+    assert task == MinerUTask.layout
+    assert image_size == (600, 300)
+    image_url = payload["messages"][0]["content"][0]["image_url"]["url"]
+    assert _image_size_from_data_url(image_url) == (600, 300)
+
+
 def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:
     upstream_response = {
         "id": "chatcmpl-test",
@@ -100,3 +127,16 @@ def test_rewrite_upstream_response_strips_markdown_for_text() -> None:
     rewritten, _, _ = rewrite_upstream_response(response, MinerUTask.text, image_size=None, settings=Settings())
 
     assert rewritten["choices"][0]["message"]["content"] == "Example Document"
+
+
+def _png_data_url(width: int, height: int) -> str:
+    image = Image.new("RGB", (width, height), "white")
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+
+def _image_size_from_data_url(url: str) -> tuple[int, int]:
+    raw = base64.b64decode(url.split(",", 1)[1])
+    with Image.open(io.BytesIO(raw)) as image:
+        return image.size
