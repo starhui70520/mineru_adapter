@@ -29,6 +29,7 @@ def test_build_upstream_payload_filters_mineru_only_parameters() -> None:
     assert "skip_special_tokens" not in payload
     assert "priority" not in payload
     assert payload["stream"] is False
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
     assert "JSON array" in payload["messages"][0]["content"][0]["text"]
 
 
@@ -39,6 +40,16 @@ def test_build_upstream_payload_can_preserve_extra_parameters_when_configured() 
     assert payload["vllm_xargs"] == {"no_repeat_ngram_size": 100}
     assert payload["skip_special_tokens"] is False
     assert payload["priority"] == 1
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_build_upstream_payload_can_keep_upstream_thinking_enabled() -> None:
+    payload, _, _ = build_upstream_payload(
+        _request_body(),
+        Settings(upstream_model="vl-model", disable_upstream_thinking=False),
+    )
+
+    assert "chat_template_kwargs" not in payload
 
 
 def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:
@@ -53,6 +64,7 @@ def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:
                     "role": "assistant",
                     "content": '```json\n[{"bbox_2d":[1,2,3,4],"label":"title"}]\n```',
                     "reasoning": "hidden chain",
+                    "reasoning_content": "hidden chain",
                 },
                 "finish_reason": "stop",
             }
@@ -72,6 +84,7 @@ def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:
         "<|box_start|>1 2 3 4<|box_end|><|ref_start|>title<|ref_end|><|rotate_up|>"
     )
     assert "reasoning" not in rewritten["choices"][0]["message"]
+    assert "reasoning_content" not in rewritten["choices"][0]["message"]
 
 
 def test_rewrite_upstream_response_strips_markdown_for_text() -> None:

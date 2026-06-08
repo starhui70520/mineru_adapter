@@ -42,6 +42,12 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
     payload["model"] = settings.upstream_model
     payload["messages"] = rewrite_messages_for_task(messages, task)
     payload["stream"] = False
+    if settings.disable_upstream_thinking:
+        chat_template_kwargs = payload.get("chat_template_kwargs")
+        if not isinstance(chat_template_kwargs, dict):
+            chat_template_kwargs = {}
+        chat_template_kwargs["enable_thinking"] = False
+        payload["chat_template_kwargs"] = chat_template_kwargs
     return payload, task, image_size
 
 
@@ -70,6 +76,7 @@ def rewrite_upstream_response(
     message["content"] = content
     if settings.strip_reasoning:
         message.pop("reasoning", None)
+        message.pop("reasoning_content", None)
     response["model"] = settings.upstream_model
     return response, raw_content, parse_error
 

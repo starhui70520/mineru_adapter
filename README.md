@@ -118,6 +118,7 @@ Adapter 配置：
 | `REQUEST_TIMEOUT` | `120` | 请求上游服务的超时时间，单位秒 |
 | `DROP_UNSUPPORTED_PARAMS` | `true` | 是否丢弃 MinerU/vLLM 专有参数 |
 | `STRIP_REASONING` | `true` | 是否从响应中移除 reasoning 字段 |
+| `DISABLE_UPSTREAM_THINKING` | `true` | 是否向上游 vLLM 发送 `chat_template_kwargs.enable_thinking=false`，用于关闭 Qwen3 等 reasoning 模型的思考输出 |
 | `ADAPTER_DEBUG_DIR` | 空 | 调试记录输出目录 |
 
 默认参数代理配置：

@@ -30,6 +30,7 @@ services:
       REQUEST_TIMEOUT: "180"
       DROP_UNSUPPORTED_PARAMS: "true"
       STRIP_REASONING: "true"
+      DISABLE_UPSTREAM_THINKING: "true"
       ADAPTER_DEBUG_DIR: "/var/log/mineru-adapter/debug"
     volumes:
       - ./debug:/var/log/mineru-adapter/debug

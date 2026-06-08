@@ -118,6 +118,7 @@ Adapter configuration:
 | `REQUEST_TIMEOUT` | `120` | Upstream request timeout in seconds |
 | `DROP_UNSUPPORTED_PARAMS` | `true` | Drop MinerU/vLLM-specific request fields |
 | `STRIP_REASONING` | `true` | Remove reasoning fields from responses |
+| `DISABLE_UPSTREAM_THINKING` | `true` | Send `chat_template_kwargs.enable_thinking=false` to upstream vLLM to disable thinking output from reasoning models such as Qwen3 |
 | `ADAPTER_DEBUG_DIR` | empty | Directory for debug records |
 
 Default proxy configuration:

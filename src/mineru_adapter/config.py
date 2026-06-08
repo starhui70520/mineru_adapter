@@ -23,6 +23,7 @@ class Settings:
     request_timeout: float = DEFAULT_REQUEST_TIMEOUT
     drop_unsupported_params: bool = True
     strip_reasoning: bool = True
+    disable_upstream_thinking: bool = True
     debug_dir: Path | None = None
 
     @classmethod
@@ -34,5 +35,6 @@ class Settings:
             request_timeout=float(os.getenv("REQUEST_TIMEOUT", str(DEFAULT_REQUEST_TIMEOUT))),
             drop_unsupported_params=_bool_env("DROP_UNSUPPORTED_PARAMS", True),
             strip_reasoning=_bool_env("STRIP_REASONING", True),
+            disable_upstream_thinking=_bool_env("DISABLE_UPSTREAM_THINKING", True),
             debug_dir=Path(debug_dir) if debug_dir else None,
         )
