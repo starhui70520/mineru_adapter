@@ -11,7 +11,8 @@ import httpx
 from pypdf import PdfReader
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
+from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile
 
 
@@ -129,16 +130,29 @@ def create_app(
 
         try:
             if forwarder is None:
-                upstream_response = await forward_to_mineru(
+                mineru_client = getattr(request.app.state, "mineru_client", None)
+                if mineru_client is None:
+                    upstream_response = await forward_to_mineru(
+                        request.method,
+                        target_url,
+                        headers,
+                        body,
+                        data,
+                        files,
+                        app_settings,
+                        client=None,
+                    )
+                    return buffered_proxy_response(upstream_response, decision)
+                upstream_response = await forward_to_mineru_stream(
                     request.method,
                     target_url,
                     headers,
                     body,
                     data,
                     files,
-                    app_settings,
-                    client=getattr(request.app.state, "mineru_client", None),
+                    mineru_client,
                 )
+                return streaming_proxy_response(upstream_response, decision)
             else:
                 upstream_response = await forwarder(
                     request.method,
@@ -152,16 +166,32 @@ def create_app(
         except httpx.RequestError as exc:
             raise HTTPException(status_code=502, detail=f"Failed to reach MinerU API: {exc}") from exc
 
-        response_headers = filter_headers(dict(upstream_response.headers))
-        response_headers.update(proxy_decision_headers(decision))
-        return Response(
-            content=upstream_response.content,
-            status_code=upstream_response.status_code,
-            headers=response_headers,
-            media_type=upstream_response.headers.get("content-type"),
-        )
+        return buffered_proxy_response(upstream_response, decision)
 
     return app
+
+
+def buffered_proxy_response(upstream_response: httpx.Response, decision: ProxyDecision) -> Response:
+    response_headers = filter_headers(dict(upstream_response.headers))
+    response_headers.update(proxy_decision_headers(decision))
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers=response_headers,
+        media_type=upstream_response.headers.get("content-type"),
+    )
+
+
+def streaming_proxy_response(upstream_response: httpx.Response, decision: ProxyDecision) -> StreamingResponse:
+    response_headers = filter_headers(dict(upstream_response.headers))
+    response_headers.update(proxy_decision_headers(decision))
+    return StreamingResponse(
+        upstream_response.aiter_raw(),
+        status_code=upstream_response.status_code,
+        headers=response_headers,
+        media_type=upstream_response.headers.get("content-type"),
+        background=BackgroundTask(upstream_response.aclose),
+    )
 
 
 def build_target_url(base_url: str, path: str, query: str) -> str:
@@ -311,6 +341,26 @@ async def forward_to_mineru(
         data=data,
         files=files,
     )
+
+
+async def forward_to_mineru_stream(
+    method: str,
+    target_url: str,
+    headers: dict[str, str],
+    body: bytes | None,
+    data: FormData | None,
+    files: list[tuple[str, tuple[str, Any, str]]] | None,
+    client: httpx.AsyncClient,
+) -> httpx.Response:
+    request = client.build_request(
+        method,
+        target_url,
+        headers=headers,
+        content=body,
+        data=data,
+        files=files,
+    )
+    return await client.send(request, stream=True)
 
 
 def filter_headers(headers: dict[str, str]) -> dict[str, str]:

@@ -187,6 +187,51 @@ def test_default_proxy_skips_text_pdf_detection_when_backend_is_explicit(monkeyp
     assert captured["data"] == {"backend": "pipeline"}
 
 
+def test_default_proxy_streams_upstream_response(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    stream = _TrackingAsyncStream([b"stream", b"ed"])
+
+    async def fake_stream_forwarder(
+        method: str,
+        target_url: str,
+        headers: dict[str, str],
+        body: bytes | None,
+        data: dict[str, str | list[str]] | None,
+        files: list[tuple[str, tuple[str, Any, str]]] | None,
+        client: httpx.AsyncClient,
+    ) -> httpx.Response:
+        captured.update(
+            {
+                "method": method,
+                "target_url": target_url,
+                "body": body,
+                "data": data,
+                "files": files,
+                "client": client,
+            }
+        )
+        return httpx.Response(200, stream=stream, headers={"content-type": "text/plain", "content-length": "8"})
+
+    monkeypatch.setattr(default_proxy, "forward_to_mineru_stream", fake_stream_forwarder)
+    settings = DefaultProxySettings(mineru_api_base_url="http://official-mineru:8000")
+
+    with TestClient(create_app(settings)) as client:
+        response = client.post("/passthrough?trace_id=abc", content=b"request-body")
+
+    assert response.status_code == 200
+    assert response.content == b"streamed"
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "content-length" not in response.headers
+    assert response.headers["x-mineru-proxy-route"] == "passthrough"
+    assert captured["method"] == "POST"
+    assert captured["target_url"] == "http://official-mineru:8000/passthrough?trace_id=abc"
+    assert captured["body"] == b"request-body"
+    assert captured["data"] is None
+    assert captured["files"] is None
+    assert isinstance(captured["client"], httpx.AsyncClient)
+    assert stream.closed is True
+
+
 def test_pdf_text_layer_detection_restores_stream_position() -> None:
     stream = io.BytesIO(b"%PDF invalid test payload")
     stream.seek(5)
@@ -232,3 +277,16 @@ class _FakePage:
     def extract_text(self) -> str:
         self.calls += 1
         return self.text
+
+
+class _TrackingAsyncStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True

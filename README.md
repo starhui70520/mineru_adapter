@@ -30,6 +30,7 @@ MinerU Adapter 是一个轻量级 OpenAI-compatible 代理服务，用于让 Min
 - 清理文本、表格、公式任务中的 Markdown code fence。
 - 支持 debug 目录记录请求、上游原始响应和 adapter 改写结果。
 - 提供默认参数代理，自动为 MinerU `/file_parse` 请求补齐 `backend` 和 `server_url`。
+- 默认参数代理会流式转发 MinerU 响应，避免大响应在代理中整包缓冲。
 
 ## 工作方式
 

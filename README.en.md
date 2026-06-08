@@ -30,6 +30,7 @@ It is not a MinerU output simulator. The upstream multimodal model is responsibl
 - Strips Markdown code fences from text, table, and formula outputs.
 - Optionally writes debug records for requests, raw upstream responses, and rewritten responses.
 - Provides a default parameter proxy that injects `backend` and `server_url` for MinerU `/file_parse` requests.
+- Streams MinerU responses through the default proxy to avoid buffering large responses in the proxy process.
 
 ## How It Works
 
