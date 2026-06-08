@@ -6,7 +6,7 @@ import io
 
 from PIL import Image
 from mineru_adapter.config import Settings
-from mineru_adapter.messages import MinerUTask
+from mineru_adapter.messages import MinerUTask, downsample_data_url_images
 from mineru_adapter.proxy import build_upstream_payload, rewrite_upstream_response
 
 
@@ -98,6 +98,28 @@ def test_build_upstream_payload_preserves_jpeg_layout_images() -> None:
     image_url = payload["messages"][0]["content"][0]["image_url"]["url"]
     assert image_url.startswith("data:image/jpeg;base64,")
     assert _image_size_from_data_url(image_url) == (600, 300)
+
+
+def test_downsample_can_mutate_private_message_copy() -> None:
+    image_url = _png_data_url(1200, 600)
+    messages = [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}]
+
+    rewritten, image_size = downsample_data_url_images(messages, 600, copy_messages=False)
+
+    assert rewritten is messages
+    assert image_size == (600, 300)
+    assert messages[0]["content"][0]["image_url"]["url"] != image_url
+
+
+def test_downsample_copies_messages_by_default() -> None:
+    image_url = _png_data_url(1200, 600)
+    messages = [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}]
+
+    rewritten, image_size = downsample_data_url_images(messages, 600)
+
+    assert rewritten is not messages
+    assert image_size == (600, 300)
+    assert messages[0]["content"][0]["image_url"]["url"] == image_url
 
 
 def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:

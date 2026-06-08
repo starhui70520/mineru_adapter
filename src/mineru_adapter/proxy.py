@@ -32,7 +32,7 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
         raise ValueError("Request body must contain a messages list")
 
     task = detect_task(messages)
-    image_size = first_image_size(messages)
+    image_size: tuple[int, int] | None = None
 
     if settings.drop_unsupported_params:
         payload = {
@@ -50,8 +50,11 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
             outbound_messages,
             settings.layout_max_image_side,
             jpeg_quality=settings.layout_jpeg_quality,
+            copy_messages=False,
         )
-        image_size = optimized_image_size or image_size
+        image_size = optimized_image_size or first_image_size(messages)
+    else:
+        image_size = first_image_size(messages)
     payload["messages"] = outbound_messages
     payload["stream"] = False
     _apply_task_token_limit(payload, task, settings)

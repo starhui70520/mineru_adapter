@@ -139,8 +139,9 @@ def downsample_data_url_images(
     messages: list[dict[str, Any]],
     max_side: int,
     jpeg_quality: int = 90,
+    copy_messages: bool = True,
 ) -> tuple[list[dict[str, Any]], tuple[int, int] | None]:
-    rewritten = copy.deepcopy(messages)
+    rewritten = copy.deepcopy(messages) if copy_messages else messages
     first_size: tuple[int, int] | None = None
     if max_side <= 0:
         return rewritten, first_image_size(rewritten)
