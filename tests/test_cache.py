@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
-from mineru_adapter.cache import UpstreamResponseCache, _cache_key_safe_value, payload_cache_key
+from mineru_adapter.cache import UpstreamResponseCache, _cache_key_safe_value, _sha256_text, payload_cache_key
 
 
 def test_payload_cache_key_is_stable_for_equivalent_payloads() -> None:
@@ -23,6 +24,12 @@ def test_payload_cache_key_fingerprints_data_urls() -> None:
     assert fingerprint["prefix"] == "data:image/png;base64"
     assert fingerprint["length"] == len("data:image/png;base64,AAAA")
     assert "AAAA" not in str(safe)
+
+
+def test_sha256_text_matches_single_encode_digest() -> None:
+    value = "data:image/png;base64," + ("ABCD" * 10)
+
+    assert _sha256_text(value, chunk_size=7) == hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def test_cache_reuses_response_objects_without_copying() -> None:

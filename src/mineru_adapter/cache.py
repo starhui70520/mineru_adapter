@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 
 
 UpstreamFactory = Callable[[], Awaitable[tuple[dict[str, Any], float]]]
+HASH_TEXT_CHUNK_SIZE = 2_000_000
 
 
 @dataclass(slots=True)
@@ -118,5 +119,15 @@ def _data_url_fingerprint(value: str) -> dict[str, Any]:
         "__type": "data-url-sha256",
         "prefix": prefix if separator else "data:image",
         "length": len(value),
-        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+        "sha256": _sha256_text(value),
     }
+
+
+def _sha256_text(value: str, chunk_size: int = HASH_TEXT_CHUNK_SIZE) -> str:
+    if len(value) <= chunk_size:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    digest = hashlib.sha256()
+    for offset in range(0, len(value), chunk_size):
+        digest.update(value[offset : offset + chunk_size].encode("utf-8"))
+    return digest.hexdigest()
