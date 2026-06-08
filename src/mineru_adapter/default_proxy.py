@@ -200,11 +200,12 @@ async def build_multipart_payload(
             filename = value.filename or "upload"
             content_type = value.content_type or "application/octet-stream"
             if should_check_text_pdf and _is_pdf_upload(filename, content_type):
-                file_bytes = await value.read()
+                await value.seek(0)
                 pdf_uploads += 1
-                if _pdf_has_text_layer(file_bytes, settings):
+                if _pdf_has_text_layer(value.file, settings):
                     text_pdf_uploads += 1
-                file_body: Any = file_bytes
+                await value.seek(0)
+                file_body: Any = value.file
             else:
                 await value.seek(0)
                 file_body = value.file
@@ -345,15 +346,30 @@ def _is_pdf_upload(filename: str, content_type: str) -> bool:
     return filename.lower().endswith(".pdf") or content_type.lower() == "application/pdf"
 
 
-def _pdf_has_text_layer(file_bytes: bytes, settings: DefaultProxySettings) -> bool:
-    if len(file_bytes) < 5 or not file_bytes.lstrip().startswith(b"%PDF"):
-        return False
+def _pdf_has_text_layer(file_obj: Any, settings: DefaultProxySettings) -> bool:
+    stream = io.BytesIO(file_obj) if isinstance(file_obj, bytes) else file_obj
+    original_position: int | None = None
     try:
-        reader = PdfReader(io.BytesIO(file_bytes))
+        original_position = stream.tell()
+    except Exception:
+        original_position = None
+
+    try:
+        stream.seek(0)
+        header = stream.read(1024)
+        if not isinstance(header, bytes) or not header.lstrip().startswith(b"%PDF"):
+            return False
+        stream.seek(0)
+        reader = PdfReader(stream)
         pages = reader.pages[: max(1, settings.text_pdf_scan_pages)]
         text = "\n".join(page.extract_text() or "" for page in pages)
     except Exception:
         return False
+    finally:
+        try:
+            stream.seek(original_position or 0)
+        except Exception:
+            pass
     compact = "".join(text.split())
     return len(compact) >= settings.text_pdf_min_chars
 

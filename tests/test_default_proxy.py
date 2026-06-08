@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from typing import Any
 
 import httpx
@@ -148,6 +149,8 @@ def test_default_proxy_injects_multipart_defaults() -> None:
     }
     assert captured["files"][0][0] == "files"
     assert captured["files"][0][1][0] == "sample.pdf"
+    assert not isinstance(captured["files"][0][1][1], bytes)
+    assert hasattr(captured["files"][0][1][1], "read")
 
 
 def test_default_proxy_skips_text_pdf_detection_when_backend_is_explicit(monkeypatch) -> None:
@@ -182,3 +185,13 @@ def test_default_proxy_skips_text_pdf_detection_when_backend_is_explicit(monkeyp
     assert response.headers["x-mineru-proxy-route"] == "explicit-backend"
     assert response.headers["x-mineru-proxy-text-pdf-checked"] == "false"
     assert captured["data"] == {"backend": "pipeline"}
+
+
+def test_pdf_text_layer_detection_restores_stream_position() -> None:
+    stream = io.BytesIO(b"%PDF invalid test payload")
+    stream.seek(5)
+
+    detected = default_proxy._pdf_has_text_layer(stream, DefaultProxySettings())
+
+    assert detected is False
+    assert stream.tell() == 5
