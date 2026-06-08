@@ -125,6 +125,7 @@ Adapter 配置：
 | `FORMULA_MAX_TOKENS` | `512` | Formula Recognition 的最大输出 token |
 | `IMAGE_MAX_TOKENS` | `1024` | Image Analysis 的最大输出 token |
 | `LAYOUT_MAX_IMAGE_SIDE` | `896` | 仅对 Layout Detection 图片降采样的最长边；设为 `0` 可关闭 |
+| `LAYOUT_JPEG_QUALITY` | `90` | Layout 图片降采样后保留 JPEG/WebP 时的质量参数 |
 | `ADAPTER_CACHE_SIZE` | `256` | adapter 内存响应缓存最大条数；设为 `0` 可关闭 |
 | `ADAPTER_CACHE_TTL_SECONDS` | `3600` | adapter 内存响应缓存过期时间，单位秒；设为 `0` 可关闭 |
 | `ADAPTER_COALESCE_REQUESTS` | `true` | 是否合并并发的相同上游请求，避免同一页同一任务重复打模型 |

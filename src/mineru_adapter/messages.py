@@ -135,7 +135,11 @@ def first_image_size(messages: list[dict[str, Any]]) -> tuple[int, int] | None:
     return None
 
 
-def downsample_data_url_images(messages: list[dict[str, Any]], max_side: int) -> tuple[list[dict[str, Any]], tuple[int, int] | None]:
+def downsample_data_url_images(
+    messages: list[dict[str, Any]],
+    max_side: int,
+    jpeg_quality: int = 90,
+) -> tuple[list[dict[str, Any]], tuple[int, int] | None]:
     rewritten = copy.deepcopy(messages)
     first_size: tuple[int, int] | None = None
     if max_side <= 0:
@@ -150,10 +154,10 @@ def downsample_data_url_images(messages: list[dict[str, Any]], max_side: int) ->
                 continue
             image_url = part.get("image_url")
             if isinstance(image_url, str):
-                resized_url, size = _downsample_data_url(image_url, max_side)
+                resized_url, size = _downsample_data_url(image_url, max_side, jpeg_quality=jpeg_quality)
                 part["image_url"] = resized_url
             elif isinstance(image_url, dict) and isinstance(image_url.get("url"), str):
-                resized_url, size = _downsample_data_url(image_url["url"], max_side)
+                resized_url, size = _downsample_data_url(image_url["url"], max_side, jpeg_quality=jpeg_quality)
                 image_url["url"] = resized_url
             else:
                 size = None
@@ -177,7 +181,7 @@ def _iter_image_urls(messages: list[dict[str, Any]]):
                 yield image_url["url"]
 
 
-_DATA_URL_RE = re.compile(r"^data:image/[^;]+;base64,(?P<data>.+)$", re.IGNORECASE | re.DOTALL)
+_DATA_URL_RE = re.compile(r"^data:(?P<mime>image/[^;]+);base64,(?P<data>.+)$", re.IGNORECASE | re.DOTALL)
 
 
 def _image_size_from_data_url(url: str) -> tuple[int, int] | None:
@@ -192,10 +196,11 @@ def _image_size_from_data_url(url: str) -> tuple[int, int] | None:
         return None
 
 
-def _downsample_data_url(url: str, max_side: int) -> tuple[str, tuple[int, int] | None]:
+def _downsample_data_url(url: str, max_side: int, jpeg_quality: int = 90) -> tuple[str, tuple[int, int] | None]:
     match = _DATA_URL_RE.match(url.strip())
     if not match:
         return url, None
+    mime_type = match.group("mime").lower()
     try:
         raw = base64.b64decode(match.group("data"), validate=False)
         with Image.open(io.BytesIO(raw)) as image:
@@ -209,8 +214,20 @@ def _downsample_data_url(url: str, max_side: int) -> tuple[str, tuple[int, int] 
             resized = image.copy()
             resized.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
             output = io.BytesIO()
-            resized.save(output, format="PNG", optimize=True)
+            output_mime, save_format, save_kwargs = _image_output_format(mime_type, resized, jpeg_quality)
+            resized.save(output, format=save_format, **save_kwargs)
             encoded = base64.b64encode(output.getvalue()).decode("ascii")
-            return f"data:image/png;base64,{encoded}", resized.size
+            return f"data:{output_mime};base64,{encoded}", resized.size
     except Exception:
         return url, None
+
+
+def _image_output_format(mime_type: str, image: Image.Image, jpeg_quality: int) -> tuple[str, str, dict[str, Any]]:
+    if mime_type in {"image/jpeg", "image/jpg"}:
+        return "image/jpeg", "JPEG", {"quality": max(1, min(100, jpeg_quality)), "optimize": True}
+    if mime_type == "image/webp":
+        return "image/webp", "WEBP", {"quality": max(1, min(100, jpeg_quality)), "method": 4}
+
+    if image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info):
+        return "image/png", "PNG", {"optimize": True}
+    return "image/png", "PNG", {"optimize": True}

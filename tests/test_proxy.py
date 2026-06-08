@@ -77,6 +77,23 @@ def test_build_upstream_payload_downsamples_layout_images() -> None:
     assert image_size == (600, 300)
     image_url = payload["messages"][0]["content"][0]["image_url"]["url"]
     assert _image_size_from_data_url(image_url) == (600, 300)
+    assert image_url.startswith("data:image/png;base64,")
+
+
+def test_build_upstream_payload_preserves_jpeg_layout_images() -> None:
+    body = _request_body()
+    body["messages"][0]["content"].insert(0, {"type": "image_url", "image_url": {"url": _jpeg_data_url(1200, 600)}})
+
+    payload, task, image_size = build_upstream_payload(
+        body,
+        Settings(upstream_model="vl-model", layout_max_image_side=600, layout_jpeg_quality=85),
+    )
+
+    assert task == MinerUTask.layout
+    assert image_size == (600, 300)
+    image_url = payload["messages"][0]["content"][0]["image_url"]["url"]
+    assert image_url.startswith("data:image/jpeg;base64,")
+    assert _image_size_from_data_url(image_url) == (600, 300)
 
 
 def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:
@@ -134,6 +151,13 @@ def _png_data_url(width: int, height: int) -> str:
     output = io.BytesIO()
     image.save(output, format="PNG")
     return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+
+def _jpeg_data_url(width: int, height: int) -> str:
+    image = Image.new("RGB", (width, height), "white")
+    output = io.BytesIO()
+    image.save(output, format="JPEG", quality=90)
+    return "data:image/jpeg;base64," + base64.b64encode(output.getvalue()).decode("ascii")
 
 
 def _image_size_from_data_url(url: str) -> tuple[int, int]:

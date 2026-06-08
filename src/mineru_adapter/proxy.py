@@ -42,7 +42,11 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
     payload["model"] = settings.upstream_model
     outbound_messages = rewrite_messages_for_task(messages, task)
     if task == MinerUTask.layout and settings.layout_max_image_side > 0:
-        outbound_messages, optimized_image_size = downsample_data_url_images(outbound_messages, settings.layout_max_image_side)
+        outbound_messages, optimized_image_size = downsample_data_url_images(
+            outbound_messages,
+            settings.layout_max_image_side,
+            jpeg_quality=settings.layout_jpeg_quality,
+        )
         image_size = optimized_image_size or image_size
     payload["messages"] = outbound_messages
     payload["stream"] = False
