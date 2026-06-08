@@ -25,18 +25,18 @@ def test_payload_cache_key_fingerprints_data_urls() -> None:
     assert "AAAA" not in str(safe)
 
 
-def test_cache_hit_returns_deep_copy() -> None:
+def test_cache_reuses_response_objects_without_copying() -> None:
     async def scenario() -> None:
         calls = 0
         cache = UpstreamResponseCache(max_entries=2, ttl_seconds=60)
+        response = {"choices": [{"message": {"content": "ok"}}]}
 
         async def factory():
             nonlocal calls
             calls += 1
-            return {"choices": [{"message": {"content": "ok"}}]}, 1.23
+            return response, 1.23
 
         first, first_elapsed, first_status = await cache.get_or_call("key", factory)
-        first["choices"][0]["message"]["content"] = "mutated"
         second, second_elapsed, second_status = await cache.get_or_call("key", factory)
 
         assert calls == 1
@@ -44,7 +44,8 @@ def test_cache_hit_returns_deep_copy() -> None:
         assert first_status == "miss"
         assert second_elapsed == 0.0
         assert second_status == "hit"
-        assert second["choices"][0]["message"]["content"] == "ok"
+        assert first is response
+        assert second is response
 
     asyncio.run(scenario())
 

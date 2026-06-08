@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import hashlib
 import json
 import time
@@ -69,8 +68,8 @@ class UpstreamResponseCache:
         if owns_task:
             await self._store(key, response)
             await self._remove_inflight(key, task)
-            return copy.deepcopy(response), elapsed, cache_status
-        return copy.deepcopy(response), 0.0, cache_status
+            return response, elapsed, cache_status
+        return response, 0.0, cache_status
 
     def _get_valid_entry(self, key: str) -> dict[str, Any] | None:
         entry = self._entries.get(key)
@@ -80,13 +79,13 @@ class UpstreamResponseCache:
             self._entries.pop(key, None)
             return None
         self._entries.move_to_end(key)
-        return copy.deepcopy(entry.response)
+        return entry.response
 
     async def _store(self, key: str, response: dict[str, Any]) -> None:
         async with self._lock:
             self._entries[key] = CacheEntry(
                 expires_at=time.monotonic() + self.ttl_seconds,
-                response=copy.deepcopy(response),
+                response=response,
             )
             self._entries.move_to_end(key)
             while len(self._entries) > self.max_entries:

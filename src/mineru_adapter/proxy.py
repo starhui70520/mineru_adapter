@@ -73,7 +73,7 @@ def rewrite_upstream_response(
     image_size: tuple[int, int] | None,
     settings: Settings,
 ) -> tuple[dict[str, Any], str, str | None]:
-    response = copy.deepcopy(upstream_response)
+    response = _copy_response_for_rewrite(upstream_response)
     message = _first_choice_message(response)
     raw_content = message.get("content") if isinstance(message.get("content"), str) else ""
 
@@ -95,6 +95,21 @@ def rewrite_upstream_response(
         message.pop("reasoning_content", None)
     response["model"] = settings.upstream_model
     return response, raw_content, parse_error
+
+
+def _copy_response_for_rewrite(upstream_response: dict[str, Any]) -> dict[str, Any]:
+    response = dict(upstream_response)
+    choices = upstream_response.get("choices")
+    if isinstance(choices, list):
+        copied_choices = list(choices)
+        if copied_choices and isinstance(copied_choices[0], dict):
+            first_choice = dict(copied_choices[0])
+            message = first_choice.get("message")
+            if isinstance(message, dict):
+                first_choice["message"] = dict(message)
+            copied_choices[0] = first_choice
+        response["choices"] = copied_choices
+    return response
 
 
 async def call_upstream(

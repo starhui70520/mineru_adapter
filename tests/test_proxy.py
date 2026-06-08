@@ -155,6 +155,8 @@ def test_rewrite_upstream_response_wraps_layout_as_openai_completion() -> None:
     )
     assert "reasoning" not in rewritten["choices"][0]["message"]
     assert "reasoning_content" not in rewritten["choices"][0]["message"]
+    assert upstream_response["choices"][0]["message"]["content"].startswith("```json")
+    assert upstream_response["choices"][0]["message"]["reasoning"] == "hidden chain"
 
 
 def test_rewrite_upstream_response_strips_markdown_for_text() -> None:
