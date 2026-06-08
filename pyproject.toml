@@ -1,0 +1,25 @@
+[project]
+name = "mineru-adapter"
+version = "0.1.0"
+description = "OpenAI-compatible adapter for MinerU HTTP-client backends."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "pillow>=10.0.0",
+  "uvicorn[standard]>=0.30.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+mineru-adapter = "mineru_adapter.api:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

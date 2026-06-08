@@ -1,0 +1,14 @@
+services:
+  mineru-adapter:
+    build: .
+    ports:
+      - "18000:18000"
+    environment:
+      UPSTREAM_BASE_URL: "http://host.docker.internal:8000"
+      UPSTREAM_MODEL: "vl-model"
+      REQUEST_TIMEOUT: "120"
+      DROP_UNSUPPORTED_PARAMS: "true"
+      STRIP_REASONING: "true"
+      ADAPTER_DEBUG_DIR: "/var/log/mineru-adapter/debug"
+    volumes:
+      - ./debug:/var/log/mineru-adapter/debug
