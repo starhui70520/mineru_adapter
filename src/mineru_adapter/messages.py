@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import copy
 import io
 import re
 from enum import Enum
@@ -98,9 +97,9 @@ def detect_task(messages: list[dict[str, Any]]) -> MinerUTask:
 def rewrite_messages_for_task(messages: list[dict[str, Any]], task: MinerUTask) -> list[dict[str, Any]]:
     prompt = TASK_PROMPTS.get(task)
     if not prompt:
-        return copy.deepcopy(messages)
+        return _copy_messages_structure(messages)
 
-    rewritten = copy.deepcopy(messages)
+    rewritten = _copy_messages_structure(messages)
     for message in reversed(rewritten):
         if message.get("role") != "user":
             continue
@@ -127,6 +126,29 @@ def _replace_first_text_part(message: dict[str, Any], prompt: str) -> bool:
     return False
 
 
+def _copy_messages_structure(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_copy_message_structure(message) for message in messages]
+
+
+def _copy_message_structure(message: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(message)
+    content = copied.get("content")
+    if isinstance(content, list):
+        copied["content"] = [_copy_content_part_structure(part) for part in content]
+    return copied
+
+
+def _copy_content_part_structure(part: Any) -> Any:
+    if not isinstance(part, dict):
+        return part
+
+    copied = dict(part)
+    image_url = copied.get("image_url")
+    if isinstance(image_url, dict):
+        copied["image_url"] = dict(image_url)
+    return copied
+
+
 def first_image_size(messages: list[dict[str, Any]]) -> tuple[int, int] | None:
     for url in _iter_image_urls(messages):
         size = _image_size_from_data_url(url)
@@ -141,7 +163,7 @@ def downsample_data_url_images(
     jpeg_quality: int = 90,
     copy_messages: bool = True,
 ) -> tuple[list[dict[str, Any]], tuple[int, int] | None]:
-    rewritten = copy.deepcopy(messages) if copy_messages else messages
+    rewritten = _copy_messages_structure(messages) if copy_messages else messages
     first_size: tuple[int, int] | None = None
     if max_side <= 0:
         return rewritten, first_image_size(rewritten)

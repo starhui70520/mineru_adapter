@@ -219,6 +219,11 @@ def test_text_layer_detection_respects_scan_page_limit() -> None:
     assert pages[2].calls == 0
 
 
+def test_count_nonspace_chars_stops_at_limit() -> None:
+    assert default_proxy._count_nonspace_chars("a b c d e f", current=2, limit=5) == 5
+    assert default_proxy._count_nonspace_chars("a b", current=0, limit=5) == 2
+
+
 class _FakePage:
     def __init__(self, text: str) -> None:
         self.text = text

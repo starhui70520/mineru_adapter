@@ -5,6 +5,7 @@ import copy
 import io
 
 from PIL import Image
+from mineru_adapter import proxy as proxy_module
 from mineru_adapter.config import Settings
 from mineru_adapter.messages import MinerUTask, downsample_data_url_images
 from mineru_adapter.proxy import build_upstream_payload, rewrite_upstream_response
@@ -57,6 +58,32 @@ def test_build_upstream_payload_can_keep_upstream_thinking_enabled() -> None:
     )
 
     assert "chat_template_kwargs" not in payload
+
+
+def test_build_upstream_payload_skips_image_size_for_non_layout(monkeypatch) -> None:
+    body = {
+        "model": "mineru-vl",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,not-a-real-image"}},
+                    {"type": "text", "text": "Text Recognition:"},
+                ],
+            }
+        ],
+    }
+
+    def fail_if_called(_messages):
+        raise AssertionError("non-layout tasks should not decode images for size")
+
+    monkeypatch.setattr(proxy_module, "first_image_size", fail_if_called)
+
+    payload, task, image_size = proxy_module.build_upstream_payload(body, Settings(upstream_model="vl-model"))
+
+    assert task == MinerUTask.text
+    assert image_size is None
+    assert payload["model"] == "vl-model"
 
 
 def test_build_upstream_payload_caps_layout_tokens() -> None:

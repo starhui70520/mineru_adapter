@@ -45,16 +45,19 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
 
     payload["model"] = settings.upstream_model
     outbound_messages = rewrite_messages_for_task(messages, task)
-    if task == MinerUTask.layout and settings.layout_max_image_side > 0:
-        outbound_messages, optimized_image_size = downsample_data_url_images(
-            outbound_messages,
-            settings.layout_max_image_side,
-            jpeg_quality=settings.layout_jpeg_quality,
-            copy_messages=False,
-        )
-        image_size = optimized_image_size or first_image_size(messages)
+    if task == MinerUTask.layout:
+        if settings.layout_max_image_side > 0:
+            outbound_messages, optimized_image_size = downsample_data_url_images(
+                outbound_messages,
+                settings.layout_max_image_side,
+                jpeg_quality=settings.layout_jpeg_quality,
+                copy_messages=False,
+            )
+            image_size = optimized_image_size or first_image_size(messages)
+        else:
+            image_size = first_image_size(messages)
     else:
-        image_size = first_image_size(messages)
+        image_size = None
     payload["messages"] = outbound_messages
     payload["stream"] = False
     _apply_task_token_limit(payload, task, settings)

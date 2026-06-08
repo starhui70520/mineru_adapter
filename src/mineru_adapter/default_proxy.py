@@ -375,14 +375,20 @@ def _pages_have_text_layer(pages: Any, min_chars: int, scan_pages: int) -> bool:
     max_pages = min(len(pages), max(1, scan_pages))
     nonspace_chars = 0
     for index in range(max_pages):
-        nonspace_chars = _count_nonspace_chars(pages[index].extract_text() or "", nonspace_chars)
+        nonspace_chars = _count_nonspace_chars(pages[index].extract_text() or "", nonspace_chars, min_chars)
         if nonspace_chars >= min_chars:
             return True
     return nonspace_chars >= min_chars
 
 
-def _count_nonspace_chars(text: str, current: int = 0) -> int:
-    return current + sum(1 for char in text if not char.isspace())
+def _count_nonspace_chars(text: str, current: int = 0, limit: int | None = None) -> int:
+    for char in text:
+        if char.isspace():
+            continue
+        current += 1
+        if limit is not None and current >= limit:
+            return current
+    return current
 
 
 app = create_app()
