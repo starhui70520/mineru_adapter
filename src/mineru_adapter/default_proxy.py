@@ -361,8 +361,7 @@ def _pdf_has_text_layer(file_obj: Any, settings: DefaultProxySettings) -> bool:
             return False
         stream.seek(0)
         reader = PdfReader(stream)
-        pages = reader.pages[: max(1, settings.text_pdf_scan_pages)]
-        text = "\n".join(page.extract_text() or "" for page in pages)
+        return _pages_have_text_layer(reader.pages, settings.text_pdf_min_chars, settings.text_pdf_scan_pages)
     except Exception:
         return False
     finally:
@@ -370,8 +369,20 @@ def _pdf_has_text_layer(file_obj: Any, settings: DefaultProxySettings) -> bool:
             stream.seek(original_position or 0)
         except Exception:
             pass
-    compact = "".join(text.split())
-    return len(compact) >= settings.text_pdf_min_chars
+
+
+def _pages_have_text_layer(pages: Any, min_chars: int, scan_pages: int) -> bool:
+    max_pages = min(len(pages), max(1, scan_pages))
+    nonspace_chars = 0
+    for index in range(max_pages):
+        nonspace_chars = _count_nonspace_chars(pages[index].extract_text() or "", nonspace_chars)
+        if nonspace_chars >= min_chars:
+            return True
+    return nonspace_chars >= min_chars
+
+
+def _count_nonspace_chars(text: str, current: int = 0) -> int:
+    return current + sum(1 for char in text if not char.isspace())
 
 
 app = create_app()

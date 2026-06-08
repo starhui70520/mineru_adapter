@@ -195,3 +195,35 @@ def test_pdf_text_layer_detection_restores_stream_position() -> None:
 
     assert detected is False
     assert stream.tell() == 5
+
+
+def test_text_layer_detection_stops_after_enough_text() -> None:
+    pages = [_FakePage("abcd"), _FakePage("efgh"), _FakePage("should not be read")]
+
+    detected = default_proxy._pages_have_text_layer(pages, min_chars=6, scan_pages=3)
+
+    assert detected is True
+    assert pages[0].calls == 1
+    assert pages[1].calls == 1
+    assert pages[2].calls == 0
+
+
+def test_text_layer_detection_respects_scan_page_limit() -> None:
+    pages = [_FakePage("abc"), _FakePage("def"), _FakePage("ghi")]
+
+    detected = default_proxy._pages_have_text_layer(pages, min_chars=7, scan_pages=2)
+
+    assert detected is False
+    assert pages[0].calls == 1
+    assert pages[1].calls == 1
+    assert pages[2].calls == 0
+
+
+class _FakePage:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.calls = 0
+
+    def extract_text(self) -> str:
+        self.calls += 1
+        return self.text
