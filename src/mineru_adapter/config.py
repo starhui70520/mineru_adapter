@@ -16,6 +16,7 @@ DEFAULT_LAYOUT_MAX_IMAGE_SIDE = 896
 DEFAULT_LAYOUT_JPEG_QUALITY = 90
 DEFAULT_ADAPTER_CACHE_SIZE = 256
 DEFAULT_ADAPTER_CACHE_TTL_SECONDS = 3600.0
+DEFAULT_ADAPTER_DEBUG_MAX_TEXT_CHARS = 20_000
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -54,6 +55,8 @@ class Settings:
     adapter_cache_ttl_seconds: float = DEFAULT_ADAPTER_CACHE_TTL_SECONDS
     adapter_coalesce_requests: bool = True
     debug_async: bool = True
+    debug_max_text_chars: int = DEFAULT_ADAPTER_DEBUG_MAX_TEXT_CHARS
+    debug_pretty_json: bool = False
     debug_dir: Path | None = None
 
     @classmethod
@@ -77,5 +80,7 @@ class Settings:
             adapter_cache_ttl_seconds=float(os.getenv("ADAPTER_CACHE_TTL_SECONDS", str(DEFAULT_ADAPTER_CACHE_TTL_SECONDS))),
             adapter_coalesce_requests=_bool_env("ADAPTER_COALESCE_REQUESTS", True),
             debug_async=_bool_env("ADAPTER_DEBUG_ASYNC", True),
+            debug_max_text_chars=_int_env("ADAPTER_DEBUG_MAX_TEXT_CHARS", DEFAULT_ADAPTER_DEBUG_MAX_TEXT_CHARS),
+            debug_pretty_json=_bool_env("ADAPTER_DEBUG_PRETTY_JSON", False),
             debug_dir=Path(debug_dir) if debug_dir else None,
         )

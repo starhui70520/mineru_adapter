@@ -42,6 +42,8 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
             "adapter_cache_size": app_settings.adapter_cache_size,
             "adapter_cache_ttl_seconds": app_settings.adapter_cache_ttl_seconds,
             "debug_async": app_settings.debug_async,
+            "debug_max_text_chars": app_settings.debug_max_text_chars,
+            "debug_pretty_json": app_settings.debug_pretty_json,
         }
 
     @app.get("/v1/models")

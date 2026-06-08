@@ -130,6 +130,8 @@ Adapter 配置：
 | `ADAPTER_CACHE_TTL_SECONDS` | `3600` | adapter 内存响应缓存过期时间，单位秒；设为 `0` 可关闭 |
 | `ADAPTER_COALESCE_REQUESTS` | `true` | 是否合并并发的相同上游请求，避免同一页同一任务重复打模型 |
 | `ADAPTER_DEBUG_ASYNC` | `true` | 是否后台线程异步写 debug JSON，避免调试日志阻塞响应 |
+| `ADAPTER_DEBUG_MAX_TEXT_CHARS` | `20000` | debug 记录中单个文本字段最多保留的字符数；设为 `0` 可关闭截断 |
+| `ADAPTER_DEBUG_PRETTY_JSON` | `false` | 是否以缩进格式写 debug JSON；默认紧凑写入以减少 IO |
 | `ADAPTER_DEBUG_DIR` | 空 | 调试记录输出目录 |
 
 默认参数代理配置：

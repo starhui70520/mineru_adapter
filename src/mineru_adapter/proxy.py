@@ -191,15 +191,19 @@ def write_debug_record(
         "cache_status": cache_status,
         "parse_error": parse_error,
         "exception": exception,
-        "request": _redact_large_images(request_body),
-        "outbound_payload": _redact_large_images(outbound_payload),
-        "upstream_raw_content": raw_content,
-        "upstream_response": _redact_large_images(upstream_response),
-        "rewritten_content": _safe_content(rewritten_response),
-        "rewritten_response": _redact_large_images(rewritten_response),
+        "request": _debug_safe_value(request_body, settings.debug_max_text_chars),
+        "outbound_payload": _debug_safe_value(outbound_payload, settings.debug_max_text_chars),
+        "upstream_raw_content": _truncate_debug_text(raw_content, settings.debug_max_text_chars),
+        "upstream_response": _debug_safe_value(upstream_response, settings.debug_max_text_chars),
+        "rewritten_content": _truncate_debug_text(_safe_content(rewritten_response), settings.debug_max_text_chars),
+        "rewritten_response": _debug_safe_value(rewritten_response, settings.debug_max_text_chars),
     }
     target = settings.debug_dir / f"{int(time.time())}-{record['id']}.json"
-    target.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    if settings.debug_pretty_json:
+        serialized = json.dumps(record, ensure_ascii=False, indent=2)
+    else:
+        serialized = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    target.write_text(serialized, encoding="utf-8")
 
 
 def _first_choice_message(response: dict[str, Any]) -> dict[str, Any]:
@@ -226,15 +230,31 @@ def _safe_content(response: dict[str, Any] | None) -> str | None:
     return content if isinstance(content, str) else None
 
 
-def _redact_large_images(value: Any) -> Any:
+def _debug_safe_value(value: Any, max_text_chars: int) -> Any:
     if isinstance(value, dict):
         result = {}
         for key, item in value.items():
             if key == "url" and isinstance(item, str) and item.startswith("data:image/"):
-                result[key] = item[:80] + f"...<redacted {len(item)} chars>"
+                result[key] = _redact_data_url(item)
             else:
-                result[key] = _redact_large_images(item)
+                result[key] = _debug_safe_value(item, max_text_chars)
         return result
     if isinstance(value, list):
-        return [_redact_large_images(item) for item in value]
+        return [_debug_safe_value(item, max_text_chars) for item in value]
+    if isinstance(value, str):
+        return _truncate_debug_text(value, max_text_chars)
     return value
+
+
+def _truncate_debug_text(value: str | None, max_text_chars: int) -> str | None:
+    if value is None or max_text_chars <= 0 or len(value) <= max_text_chars:
+        return value
+    omitted = len(value) - max_text_chars
+    return value[:max_text_chars] + f"...<truncated {omitted} chars>"
+
+
+def _redact_data_url(value: str) -> str:
+    prefix, separator, data = value.partition(",")
+    if not separator:
+        return f"data:image,<redacted {len(value)} chars>"
+    return f"{prefix},<redacted {len(data)} base64 chars>"

@@ -3,12 +3,13 @@ from __future__ import annotations
 import base64
 import copy
 import io
+import json
 
 from PIL import Image
 from mineru_adapter import proxy as proxy_module
 from mineru_adapter.config import Settings
 from mineru_adapter.messages import MinerUTask, downsample_data_url_images
-from mineru_adapter.proxy import build_upstream_payload, rewrite_upstream_response
+from mineru_adapter.proxy import build_upstream_payload, rewrite_upstream_response, write_debug_record
 
 
 def _request_body() -> dict:
@@ -199,6 +200,44 @@ def test_rewrite_upstream_response_strips_markdown_for_text() -> None:
     rewritten, _, _ = rewrite_upstream_response(response, MinerUTask.text, image_size=None, settings=Settings())
 
     assert rewritten["choices"][0]["message"]["content"] == "Example Document"
+
+
+def test_write_debug_record_truncates_text_and_uses_compact_json(tmp_path) -> None:
+    image_url = "data:image/png;base64," + ("A" * 100)
+    request_body = {
+        "messages": [
+            {
+                "content": [
+                    {"type": "text", "text": "abcdefghij"},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ]
+            }
+        ]
+    }
+    response = {"choices": [{"message": {"content": "0123456789"}}]}
+
+    write_debug_record(
+        Settings(debug_dir=tmp_path, debug_max_text_chars=5, debug_pretty_json=False),
+        request_body,
+        request_body,
+        response,
+        response,
+        MinerUTask.text,
+        0.1,
+        "0123456789",
+        None,
+    )
+
+    debug_file = next(tmp_path.glob("*.json"))
+    raw_debug = debug_file.read_text(encoding="utf-8")
+    record = json.loads(raw_debug)
+
+    assert "\n" not in raw_debug
+    assert record["upstream_raw_content"] == "01234...<truncated 5 chars>"
+    assert record["rewritten_content"] == "01234...<truncated 5 chars>"
+    assert record["request"]["messages"][0]["content"][0]["text"] == "abcde...<truncated 5 chars>"
+    assert "<redacted" in record["request"]["messages"][0]["content"][1]["image_url"]["url"]
+    assert "AAAA" not in record["request"]["messages"][0]["content"][1]["image_url"]["url"]
 
 
 def _png_data_url(width: int, height: int) -> str:

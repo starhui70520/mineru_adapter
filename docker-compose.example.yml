@@ -42,6 +42,8 @@ services:
       ADAPTER_CACHE_TTL_SECONDS: "3600"
       ADAPTER_COALESCE_REQUESTS: "true"
       ADAPTER_DEBUG_ASYNC: "true"
+      ADAPTER_DEBUG_MAX_TEXT_CHARS: "20000"
+      ADAPTER_DEBUG_PRETTY_JSON: "false"
     expose:
       - "18000"
 

@@ -130,6 +130,8 @@ Adapter configuration:
 | `ADAPTER_CACHE_TTL_SECONDS` | `3600` | In-memory adapter response cache TTL in seconds; set `0` to disable |
 | `ADAPTER_COALESCE_REQUESTS` | `true` | Coalesce concurrent identical upstream requests to avoid duplicate model calls |
 | `ADAPTER_DEBUG_ASYNC` | `true` | Write debug JSON records on a background thread so logging does not block responses |
+| `ADAPTER_DEBUG_MAX_TEXT_CHARS` | `20000` | Maximum characters kept for each text field in debug records; set `0` to disable truncation |
+| `ADAPTER_DEBUG_PRETTY_JSON` | `false` | Write indented debug JSON when enabled; compact JSON is used by default to reduce IO |
 | `ADAPTER_DEBUG_DIR` | empty | Directory for debug records |
 
 Default proxy configuration:
