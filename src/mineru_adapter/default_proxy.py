@@ -34,6 +34,15 @@ FormDataValue: TypeAlias = str | list[str]
 FormData: TypeAlias = dict[str, FormDataValue]
 
 
+@dataclass(slots=True)
+class ProxyDecision:
+    backend: str | None = None
+    server_url: str | None = None
+    route: str = "passthrough"
+    text_pdf_detected: bool = False
+    text_pdf_checked: bool = False
+
+
 def _bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -98,6 +107,8 @@ def create_app(
             "force_defaults": app_settings.force_defaults,
             "auto_text_pdf_routing": app_settings.auto_text_pdf_routing,
             "text_pdf_backend": app_settings.text_pdf_backend,
+            "text_pdf_min_chars": app_settings.text_pdf_min_chars,
+            "text_pdf_scan_pages": app_settings.text_pdf_scan_pages,
         }
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
@@ -108,9 +119,10 @@ def create_app(
         body: bytes | None = None
         data: list[tuple[str, str]] | None = None
         files: list[tuple[str, tuple[str, Any, str]]] | None = None
+        decision = ProxyDecision()
 
         if should_inject_defaults(path, request):
-            data, files = await build_multipart_payload(request, app_settings)
+            data, files, decision = await build_multipart_payload(request, app_settings)
             headers.pop("content-type", None)
         else:
             body = await request.body()
@@ -140,10 +152,12 @@ def create_app(
         except httpx.RequestError as exc:
             raise HTTPException(status_code=502, detail=f"Failed to reach MinerU API: {exc}") from exc
 
+        response_headers = filter_headers(dict(upstream_response.headers))
+        response_headers.update(proxy_decision_headers(decision))
         return Response(
             content=upstream_response.content,
             status_code=upstream_response.status_code,
-            headers=filter_headers(dict(upstream_response.headers)),
+            headers=response_headers,
             media_type=upstream_response.headers.get("content-type"),
         )
 
@@ -166,18 +180,26 @@ def should_inject_defaults(path: str, request: Request) -> bool:
 async def build_multipart_payload(
     request: Request,
     settings: DefaultProxySettings,
-) -> tuple[FormData, list[tuple[str, tuple[str, Any, str]]]]:
+) -> tuple[FormData, list[tuple[str, tuple[str, Any, str]]], ProxyDecision]:
     form = await request.form()
+    items = list(form.multi_items())
     fields: list[tuple[str, str]] = []
     files: list[tuple[str, tuple[str, Any, str]]] = []
     pdf_uploads = 0
     text_pdf_uploads = 0
 
-    for key, value in form.multi_items():
+    for key, value in items:
+        if not isinstance(value, UploadFile):
+            fields.append((key, str(value)))
+
+    existing = {key for key, _ in fields}
+    should_check_text_pdf = settings.auto_text_pdf_routing and (settings.force_defaults or "backend" not in existing)
+
+    for key, value in items:
         if isinstance(value, UploadFile):
             filename = value.filename or "upload"
             content_type = value.content_type or "application/octet-stream"
-            if settings.auto_text_pdf_routing and _is_pdf_upload(filename, content_type):
+            if should_check_text_pdf and _is_pdf_upload(filename, content_type):
                 file_bytes = await value.read()
                 pdf_uploads += 1
                 if _pdf_has_text_layer(file_bytes, settings):
@@ -196,35 +218,55 @@ async def build_multipart_payload(
                     ),
                 )
             )
-        else:
-            fields.append((key, str(value)))
 
     text_pdf_detected = pdf_uploads > 0 and pdf_uploads == text_pdf_uploads
-    return fields_to_httpx_data(apply_default_fields(fields, settings, text_pdf_detected=text_pdf_detected)), files
+    applied_fields, decision = apply_default_fields(
+        fields,
+        settings,
+        text_pdf_detected=text_pdf_detected,
+        text_pdf_checked=pdf_uploads > 0,
+    )
+    return fields_to_httpx_data(applied_fields), files, decision
 
 
 def apply_default_fields(
     fields: list[tuple[str, str]],
     settings: DefaultProxySettings,
     text_pdf_detected: bool = False,
-) -> list[tuple[str, str]]:
+    text_pdf_checked: bool = False,
+) -> tuple[list[tuple[str, str]], ProxyDecision]:
     result = list(fields)
     existing = {key for key, _ in result}
+    decision = ProxyDecision(
+        backend=_last_field_value(result, "backend"),
+        server_url=_last_field_value(result, "server_url"),
+        text_pdf_detected=text_pdf_detected,
+        text_pdf_checked=text_pdf_checked,
+    )
 
     if settings.force_defaults:
         result = [(key, value) for key, value in result if key not in {"backend", "server_url"}]
         existing = {key for key, _ in result}
+        decision.route = "forced-defaults"
 
     if "backend" not in existing:
         backend = settings.text_pdf_backend if settings.auto_text_pdf_routing and text_pdf_detected else settings.default_backend
         result.append(("backend", backend))
         existing.add("backend")
+        decision.backend = backend
+        decision.route = "text-pdf" if settings.auto_text_pdf_routing and text_pdf_detected else "default"
     else:
         backend = _last_field_value(result, "backend") or settings.default_backend
+        decision.backend = backend
+        if decision.route == "passthrough":
+            decision.route = "explicit-backend"
 
     if _backend_requires_server_url(backend) and "server_url" not in existing:
         result.append(("server_url", settings.default_server_url))
-    return result
+        decision.server_url = settings.default_server_url
+    else:
+        decision.server_url = _last_field_value(result, "server_url")
+    return result, decision
 
 
 def fields_to_httpx_data(fields: list[tuple[str, str]]) -> FormData:
@@ -272,6 +314,19 @@ async def forward_to_mineru(
 
 def filter_headers(headers: dict[str, str]) -> dict[str, str]:
     return {key: value for key, value in headers.items() if key.lower() not in HOP_BY_HOP_HEADERS}
+
+
+def proxy_decision_headers(decision: ProxyDecision) -> dict[str, str]:
+    headers = {
+        "x-mineru-proxy-route": decision.route,
+        "x-mineru-proxy-text-pdf": str(decision.text_pdf_detected).lower(),
+        "x-mineru-proxy-text-pdf-checked": str(decision.text_pdf_checked).lower(),
+    }
+    if decision.backend:
+        headers["x-mineru-proxy-backend"] = decision.backend
+    if decision.server_url:
+        headers["x-mineru-proxy-server-url"] = decision.server_url
+    return headers
 
 
 def _last_field_value(fields: list[tuple[str, str]], key: str) -> str | None:

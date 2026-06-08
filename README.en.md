@@ -151,6 +151,17 @@ The default parameter proxy only injects fields for multipart `POST /file_parse`
 - If the request has no `backend`, it injects `DEFAULT_BACKEND`.
 - If the request has no `server_url`, it injects `DEFAULT_SERVER_URL`.
 - If the request already includes `backend/server_url`, the caller-provided values are preserved.
+- If `AUTO_TEXT_PDF_ROUTING` is enabled and the request does not explicitly include `backend`, text-layer PDFs are routed to `TEXT_PDF_BACKEND` and skip the adapter VLM.
+
+The proxy adds routing diagnostic response headers:
+
+| Header | Description |
+| --- | --- |
+| `x-mineru-proxy-route` | Route result such as `default`, `text-pdf`, or `explicit-backend` |
+| `x-mineru-proxy-backend` | Final backend sent to MinerU |
+| `x-mineru-proxy-server-url` | Final server_url sent to MinerU; only present for http-client backends |
+| `x-mineru-proxy-text-pdf` | Whether the file was classified as a text-layer PDF |
+| `x-mineru-proxy-text-pdf-checked` | Whether text-layer detection ran; explicit `backend` requests skip it by default |
 
 To force every request through the adapter, set:
 

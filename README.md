@@ -151,6 +151,17 @@ Adapter 配置：
 - 如果请求没有 `backend`，补 `DEFAULT_BACKEND`。
 - 如果请求没有 `server_url`，补 `DEFAULT_SERVER_URL`。
 - 如果请求已经带了 `backend/server_url`，默认保留调用方传入的值。
+- 如果启用 `AUTO_TEXT_PDF_ROUTING` 且请求没有显式 `backend`，文本层 PDF 会自动改走 `TEXT_PDF_BACKEND`，并跳过 adapter VLM。
+
+代理响应会附带路由诊断响应头：
+
+| 响应头 | 说明 |
+| --- | --- |
+| `x-mineru-proxy-route` | `default`、`text-pdf`、`explicit-backend` 等路由结果 |
+| `x-mineru-proxy-backend` | 最终传给 MinerU 的 backend |
+| `x-mineru-proxy-server-url` | 最终传给 MinerU 的 server_url；仅 http-client backend 存在 |
+| `x-mineru-proxy-text-pdf` | 是否判定为文本层 PDF |
+| `x-mineru-proxy-text-pdf-checked` | 是否执行了文本层检测；显式传 `backend` 时默认不会检测 |
 
 如果需要强制所有请求都走 adapter，可以设置：
 
