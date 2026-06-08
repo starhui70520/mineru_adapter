@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from .cache import UpstreamResponseCache, payload_cache_key
 from .config import Settings
 from .proxy import build_upstream_payload, call_upstream, openai_models_response, rewrite_upstream_response, write_debug_record
 
@@ -22,6 +23,11 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
     async def lifespan(app: FastAPI):
         async with httpx.AsyncClient(timeout=app_settings.request_timeout) as client:
             app.state.upstream_client = client
+            app.state.response_cache = UpstreamResponseCache(
+                max_entries=app_settings.adapter_cache_size,
+                ttl_seconds=app_settings.adapter_cache_ttl_seconds,
+                coalesce_requests=app_settings.adapter_coalesce_requests,
+            )
             yield
 
     app = FastAPI(title="MinerU Adapter", version="0.1.0", lifespan=lifespan)
@@ -32,6 +38,8 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
             "status": "ok",
             "upstream_base_url": app_settings.upstream_base_url,
             "upstream_model": app_settings.upstream_model,
+            "adapter_cache_size": app_settings.adapter_cache_size,
+            "adapter_cache_ttl_seconds": app_settings.adapter_cache_ttl_seconds,
         }
 
     @app.get("/v1/models")
@@ -52,17 +60,29 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
         raw_content = None
         elapsed_seconds = None
         parse_error = None
+        cache_status = None
 
         try:
             outbound_payload, task, image_size = build_upstream_payload(request_body, app_settings)
             if upstream_caller is call_upstream:
-                upstream_response, elapsed_seconds = await call_upstream(
-                    outbound_payload,
-                    app_settings,
-                    client=getattr(request.app.state, "upstream_client", None),
-                )
+                upstream_client = getattr(request.app.state, "upstream_client", None)
+                response_cache = getattr(request.app.state, "response_cache", None)
+                if response_cache is None:
+                    upstream_response, elapsed_seconds = await call_upstream(
+                        outbound_payload,
+                        app_settings,
+                        client=upstream_client,
+                    )
+                    cache_status = "unavailable"
+                else:
+                    cache_key = payload_cache_key(outbound_payload)
+                    upstream_response, elapsed_seconds, cache_status = await response_cache.get_or_call(
+                        cache_key,
+                        lambda: call_upstream(outbound_payload, app_settings, client=upstream_client),
+                    )
             else:
                 upstream_response, elapsed_seconds = await upstream_caller(outbound_payload, app_settings)
+                cache_status = "bypass"
             rewritten_response, raw_content, parse_error = rewrite_upstream_response(
                 upstream_response,
                 task,
@@ -79,6 +99,7 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
                 elapsed_seconds,
                 raw_content,
                 parse_error,
+                cache_status=cache_status,
             )
             return JSONResponse(rewritten_response)
         except ValueError as exc:
@@ -98,6 +119,7 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
                     elapsed_seconds,
                     raw_content,
                     parse_error,
+                    cache_status=cache_status,
                     exception=repr(exc),
                 )
             raise HTTPException(status_code=502, detail=str(exc)) from exc

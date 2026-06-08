@@ -13,6 +13,8 @@ DEFAULT_TABLE_MAX_TOKENS = 2048
 DEFAULT_FORMULA_MAX_TOKENS = 512
 DEFAULT_IMAGE_MAX_TOKENS = 1024
 DEFAULT_LAYOUT_MAX_IMAGE_SIDE = 896
+DEFAULT_ADAPTER_CACHE_SIZE = 256
+DEFAULT_ADAPTER_CACHE_TTL_SECONDS = 3600.0
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -46,6 +48,9 @@ class Settings:
     formula_max_tokens: int = DEFAULT_FORMULA_MAX_TOKENS
     image_max_tokens: int = DEFAULT_IMAGE_MAX_TOKENS
     layout_max_image_side: int = DEFAULT_LAYOUT_MAX_IMAGE_SIDE
+    adapter_cache_size: int = DEFAULT_ADAPTER_CACHE_SIZE
+    adapter_cache_ttl_seconds: float = DEFAULT_ADAPTER_CACHE_TTL_SECONDS
+    adapter_coalesce_requests: bool = True
     debug_dir: Path | None = None
 
     @classmethod
@@ -64,5 +69,8 @@ class Settings:
             formula_max_tokens=_int_env("FORMULA_MAX_TOKENS", DEFAULT_FORMULA_MAX_TOKENS),
             image_max_tokens=_int_env("IMAGE_MAX_TOKENS", DEFAULT_IMAGE_MAX_TOKENS),
             layout_max_image_side=_int_env("LAYOUT_MAX_IMAGE_SIDE", DEFAULT_LAYOUT_MAX_IMAGE_SIDE),
+            adapter_cache_size=_int_env("ADAPTER_CACHE_SIZE", DEFAULT_ADAPTER_CACHE_SIZE),
+            adapter_cache_ttl_seconds=float(os.getenv("ADAPTER_CACHE_TTL_SECONDS", str(DEFAULT_ADAPTER_CACHE_TTL_SECONDS))),
+            adapter_coalesce_requests=_bool_env("ADAPTER_COALESCE_REQUESTS", True),
             debug_dir=Path(debug_dir) if debug_dir else None,
         )

@@ -125,6 +125,9 @@ Adapter configuration:
 | `FORMULA_MAX_TOKENS` | `512` | Maximum output tokens for Formula Recognition |
 | `IMAGE_MAX_TOKENS` | `1024` | Maximum output tokens for Image Analysis |
 | `LAYOUT_MAX_IMAGE_SIDE` | `896` | Longest image side for Layout Detection downsampling; set `0` to disable |
+| `ADAPTER_CACHE_SIZE` | `256` | Maximum in-memory adapter response cache entries; set `0` to disable |
+| `ADAPTER_CACHE_TTL_SECONDS` | `3600` | In-memory adapter response cache TTL in seconds; set `0` to disable |
+| `ADAPTER_COALESCE_REQUESTS` | `true` | Coalesce concurrent identical upstream requests to avoid duplicate model calls |
 | `ADAPTER_DEBUG_DIR` | empty | Directory for debug records |
 
 Default proxy configuration:

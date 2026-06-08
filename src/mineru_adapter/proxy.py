@@ -149,6 +149,7 @@ def write_debug_record(
     elapsed_seconds: float | None,
     raw_content: str | None,
     parse_error: str | None,
+    cache_status: str | None = None,
     exception: str | None = None,
 ) -> None:
     if settings.debug_dir is None:
@@ -158,6 +159,7 @@ def write_debug_record(
         "id": str(uuid.uuid4()),
         "task": task.value,
         "elapsed_seconds": elapsed_seconds,
+        "cache_status": cache_status,
         "parse_error": parse_error,
         "exception": exception,
         "request": _redact_large_images(request_body),
