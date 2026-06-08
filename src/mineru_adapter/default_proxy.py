@@ -219,7 +219,7 @@ async def build_multipart_payload(
     fields: list[tuple[str, str]] = []
     files: list[tuple[str, tuple[str, Any, str]]] = []
     pdf_uploads = 0
-    text_pdf_uploads = 0
+    all_pdf_uploads_have_text = True
 
     for key, value in items:
         if not isinstance(value, UploadFile):
@@ -235,10 +235,10 @@ async def build_multipart_payload(
             filename = value.filename or "upload"
             content_type = value.content_type or "application/octet-stream"
             if should_check_text_pdf and _is_pdf_upload(filename, content_type):
-                await value.seek(0)
                 pdf_uploads += 1
-                if _pdf_has_text_layer(value.file, settings):
-                    text_pdf_uploads += 1
+                if all_pdf_uploads_have_text:
+                    await value.seek(0)
+                    all_pdf_uploads_have_text = _pdf_has_text_layer(value.file, settings)
                 await value.seek(0)
                 file_body: Any = value.file
             else:
@@ -255,7 +255,7 @@ async def build_multipart_payload(
                 )
             )
 
-    text_pdf_detected = pdf_uploads > 0 and pdf_uploads == text_pdf_uploads
+    text_pdf_detected = pdf_uploads > 0 and all_pdf_uploads_have_text
     applied_fields, decision = apply_default_fields(
         fields,
         settings,

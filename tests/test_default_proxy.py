@@ -259,6 +259,55 @@ def test_default_proxy_force_text_pdf_routing_checks_explicit_backend(monkeypatc
     assert captured["files"][0][1][0] == "sample.pdf"
 
 
+def test_default_proxy_stops_text_pdf_detection_after_first_non_text_pdf(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    calls = 0
+
+    def detect_text_pdf(*args: Any, **kwargs: Any) -> bool:
+        nonlocal calls
+        calls += 1
+        return False
+
+    async def fake_forwarder(
+        method: str,
+        target_url: str,
+        headers: dict[str, str],
+        body: bytes | None,
+        data: dict[str, str | list[str]] | None,
+        files: list[tuple[str, tuple[str, Any, str]]] | None,
+        settings: DefaultProxySettings,
+    ) -> httpx.Response:
+        captured["data"] = data
+        captured["files"] = files
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr(default_proxy, "_pdf_has_text_layer", detect_text_pdf)
+    settings = DefaultProxySettings(default_backend="vlm-http-client", default_server_url="http://mineru-adapter:18000")
+    client = TestClient(create_app(settings, forwarder=fake_forwarder))
+
+    response = client.post(
+        "/file_parse",
+        data={"return_md": "true"},
+        files=[
+            ("files", ("scan-1.pdf", b"%PDF first", "application/pdf")),
+            ("files", ("scan-2.pdf", b"%PDF second", "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-mineru-proxy-route"] == "default"
+    assert response.headers["x-mineru-proxy-backend"] == "vlm-http-client"
+    assert response.headers["x-mineru-proxy-text-pdf"] == "false"
+    assert response.headers["x-mineru-proxy-text-pdf-checked"] == "true"
+    assert calls == 1
+    assert captured["data"] == {
+        "return_md": "true",
+        "backend": "vlm-http-client",
+        "server_url": "http://mineru-adapter:18000",
+    }
+    assert [file_info[1][0] for file_info in captured["files"]] == ["scan-1.pdf", "scan-2.pdf"]
+
+
 def test_default_proxy_streams_upstream_response(monkeypatch) -> None:
     captured: dict[str, Any] = {}
     stream = _TrackingAsyncStream([b"stream", b"ed"])
