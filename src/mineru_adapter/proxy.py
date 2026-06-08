@@ -13,6 +13,7 @@ from .config import Settings
 from .layout import LayoutParseError, layout_json_to_mineru_tags, strip_markdown_fence
 from .messages import MinerUTask, detect_task, downsample_data_url_images, first_image_size, rewrite_messages_for_task
 
+IMMUTABLE_REQUEST_VALUE_TYPES = (str, int, float, bool, type(None))
 
 ALLOWED_OPENAI_FIELDS = {
     "model",
@@ -36,12 +37,12 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
 
     if settings.drop_unsupported_params:
         payload = {
-            key: copy.deepcopy(value)
+            key: _copy_request_value(value)
             for key, value in request_body.items()
             if key in ALLOWED_OPENAI_FIELDS and key != "messages"
         }
     else:
-        payload = {key: copy.deepcopy(value) for key, value in request_body.items() if key != "messages"}
+        payload = {key: _copy_request_value(value) for key, value in request_body.items() if key != "messages"}
 
     payload["model"] = settings.upstream_model
     outbound_messages = rewrite_messages_for_task(messages, task)
@@ -68,6 +69,12 @@ def build_upstream_payload(request_body: dict[str, Any], settings: Settings) -> 
         chat_template_kwargs["enable_thinking"] = False
         payload["chat_template_kwargs"] = chat_template_kwargs
     return payload, task, image_size
+
+
+def _copy_request_value(value: Any) -> Any:
+    if isinstance(value, IMMUTABLE_REQUEST_VALUE_TYPES):
+        return value
+    return copy.deepcopy(value)
 
 
 def rewrite_upstream_response(

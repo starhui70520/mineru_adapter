@@ -41,6 +41,7 @@ def test_build_upstream_payload_filters_mineru_only_parameters() -> None:
 def test_build_upstream_payload_can_preserve_extra_parameters_when_configured() -> None:
     body = _request_body()
     body["custom"] = {"nested": ["value"]}
+    body["chat_template_kwargs"] = {"existing": True}
     payload, _, _ = build_upstream_payload(body, Settings(upstream_model="vl-model", drop_unsupported_params=False))
 
     assert payload["vllm_xargs"] == {"no_repeat_ngram_size": 100}
@@ -49,7 +50,8 @@ def test_build_upstream_payload_can_preserve_extra_parameters_when_configured() 
     assert payload["custom"] == {"nested": ["value"]}
     assert payload["messages"] is not body["messages"]
     assert payload["messages"][0]["content"][0]["text"] != body["messages"][0]["content"][0]["text"]
-    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+    assert payload["chat_template_kwargs"] == {"existing": True, "enable_thinking": False}
+    assert body["chat_template_kwargs"] == {"existing": True}
 
 
 def test_build_upstream_payload_can_keep_upstream_thinking_enabled() -> None:
