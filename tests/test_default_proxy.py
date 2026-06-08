@@ -68,7 +68,7 @@ def test_default_proxy_injects_multipart_defaults() -> None:
         target_url: str,
         headers: dict[str, str],
         body: bytes | None,
-        data: list[tuple[str, str]] | None,
+        data: dict[str, str | list[str]] | None,
         files: list[tuple[str, tuple[str, Any, str]]] | None,
         settings: DefaultProxySettings,
     ) -> httpx.Response:
@@ -100,10 +100,10 @@ def test_default_proxy_injects_multipart_defaults() -> None:
     assert captured["method"] == "POST"
     assert captured["target_url"] == "http://official-mineru:8000/file_parse?trace_id=abc"
     assert captured["body"] is None
-    assert captured["data"] == [
-        ("return_md", "true"),
-        ("backend", "vlm-http-client"),
-        ("server_url", "http://mineru-adapter:18000"),
-    ]
+    assert captured["data"] == {
+        "return_md": "true",
+        "backend": "vlm-http-client",
+        "server_url": "http://mineru-adapter:18000",
+    }
     assert captured["files"][0][0] == "files"
     assert captured["files"][0][1][0] == "sample.pdf"

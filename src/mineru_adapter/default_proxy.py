@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TypeAlias
 
 import httpx
 import uvicorn
@@ -14,6 +14,7 @@ from starlette.datastructures import UploadFile
 
 HOP_BY_HOP_HEADERS = {
     "connection",
+    "host",
     "keep-alive",
     "proxy-authenticate",
     "proxy-authorization",
@@ -26,6 +27,8 @@ HOP_BY_HOP_HEADERS = {
     "content-encoding",
 }
 
+FormDataValue: TypeAlias = str | list[str]
+FormData: TypeAlias = dict[str, FormDataValue]
 
 def _bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -54,7 +57,7 @@ class DefaultProxySettings:
 
 
 Forwarder = Callable[
-    [str, str, dict[str, str], bytes | None, list[tuple[str, str]] | None, list[tuple[str, tuple[str, Any, str]]] | None, DefaultProxySettings],
+    [str, str, dict[str, str], bytes | None, FormData | None, list[tuple[str, tuple[str, Any, str]]] | None, DefaultProxySettings],
     Awaitable[httpx.Response],
 ]
 
@@ -88,6 +91,7 @@ def create_app(
 
         if should_inject_defaults(path, request):
             data, files = await build_multipart_payload(request, app_settings)
+            headers.pop("content-type", None)
         else:
             body = await request.body()
 
@@ -130,9 +134,9 @@ def should_inject_defaults(path: str, request: Request) -> bool:
 async def build_multipart_payload(
     request: Request,
     settings: DefaultProxySettings,
-) -> tuple[list[tuple[str, str]], list[tuple[str, tuple[str, Any, str]]]]:
+) -> tuple[FormData, list[tuple[str, tuple[str, Any, str]]]]:
     form = await request.form()
-    data: list[tuple[str, str]] = []
+    fields: list[tuple[str, str]] = []
     files: list[tuple[str, tuple[str, Any, str]]] = []
 
     for key, value in form.multi_items():
@@ -149,9 +153,9 @@ async def build_multipart_payload(
                 )
             )
         else:
-            data.append((key, str(value)))
+            fields.append((key, str(value)))
 
-    return apply_default_fields(data, settings), files
+    return fields_to_httpx_data(apply_default_fields(fields, settings)), files
 
 
 def apply_default_fields(fields: list[tuple[str, str]], settings: DefaultProxySettings) -> list[tuple[str, str]]:
@@ -169,12 +173,25 @@ def apply_default_fields(fields: list[tuple[str, str]], settings: DefaultProxySe
     return result
 
 
+def fields_to_httpx_data(fields: list[tuple[str, str]]) -> FormData:
+    data: FormData = {}
+    for key, value in fields:
+        existing = data.get(key)
+        if existing is None:
+            data[key] = value
+        elif isinstance(existing, list):
+            existing.append(value)
+        else:
+            data[key] = [existing, value]
+    return data
+
+
 async def forward_to_mineru(
     method: str,
     target_url: str,
     headers: dict[str, str],
     body: bytes | None,
-    data: list[tuple[str, str]] | None,
+    data: FormData | None,
     files: list[tuple[str, tuple[str, Any, str]]] | None,
     settings: DefaultProxySettings,
 ) -> httpx.Response:
