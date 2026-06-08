@@ -99,5 +99,25 @@ class UpstreamResponseCache:
 
 
 def payload_cache_key(payload: dict[str, Any]) -> str:
-    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    serialized = json.dumps(_cache_key_safe_value(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _cache_key_safe_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _cache_key_safe_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_cache_key_safe_value(item) for item in value]
+    if isinstance(value, str) and value.startswith("data:image/"):
+        return _data_url_fingerprint(value)
+    return value
+
+
+def _data_url_fingerprint(value: str) -> dict[str, Any]:
+    prefix, separator, _ = value.partition(",")
+    return {
+        "__type": "data-url-sha256",
+        "prefix": prefix if separator else "data:image",
+        "length": len(value),
+        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+    }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from mineru_adapter.cache import UpstreamResponseCache, payload_cache_key
+from mineru_adapter.cache import UpstreamResponseCache, _cache_key_safe_value, payload_cache_key
 
 
 def test_payload_cache_key_is_stable_for_equivalent_payloads() -> None:
@@ -10,6 +10,19 @@ def test_payload_cache_key_is_stable_for_equivalent_payloads() -> None:
     right = {"temperature": 0, "messages": [{"content": "x", "role": "user"}], "model": "vl-model"}
 
     assert payload_cache_key(left) == payload_cache_key(right)
+
+
+def test_payload_cache_key_fingerprints_data_urls() -> None:
+    left = {"messages": [{"content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]}
+    right = {"messages": [{"content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,BBBB"}}]}]}
+
+    assert payload_cache_key(left) != payload_cache_key(right)
+    safe = _cache_key_safe_value(left)
+    fingerprint = safe["messages"][0]["content"][0]["image_url"]["url"]
+    assert fingerprint["__type"] == "data-url-sha256"
+    assert fingerprint["prefix"] == "data:image/png;base64"
+    assert fingerprint["length"] == len("data:image/png;base64,AAAA")
+    assert "AAAA" not in str(safe)
 
 
 def test_cache_hit_returns_deep_copy() -> None:
