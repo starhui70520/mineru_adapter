@@ -59,6 +59,48 @@ def test_chat_completion_rewrites_layout_response() -> None:
     )
 
 
+def test_chat_completion_skips_cache_key_when_cache_disabled(monkeypatch) -> None:
+    async def fake_call_upstream(payload: dict[str, Any], settings: Settings, client: Any = None):
+        return (
+            {
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "model": settings.upstream_model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "```text\nExample\n```"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+            0.01,
+        )
+
+    def fail_cache_key(_payload: dict[str, Any]) -> str:
+        raise AssertionError("cache key should not be computed when adapter cache is disabled")
+
+    monkeypatch.setattr(api, "call_upstream", fake_call_upstream)
+    monkeypatch.setattr(api, "payload_cache_key", fail_cache_key)
+    client = TestClient(
+        create_app(
+            Settings(upstream_model="vl-model", adapter_cache_size=0),
+            upstream_caller=fake_call_upstream,
+        )
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "vl-model",
+            "messages": [{"role": "user", "content": "Text Recognition:"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "Example"
+
+
 def test_schedule_debug_record_sync(monkeypatch, tmp_path) -> None:
     calls: list[tuple[Any, ...]] = []
 

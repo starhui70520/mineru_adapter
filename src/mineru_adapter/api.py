@@ -78,6 +78,13 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
                         client=upstream_client,
                     )
                     cache_status = "unavailable"
+                elif not response_cache.enabled:
+                    upstream_response, elapsed_seconds = await call_upstream(
+                        outbound_payload,
+                        app_settings,
+                        client=upstream_client,
+                    )
+                    cache_status = "disabled"
                 else:
                     cache_key = payload_cache_key(outbound_payload)
                     upstream_response, elapsed_seconds, cache_status = await response_cache.get_or_call(
