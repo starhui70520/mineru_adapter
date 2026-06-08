@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
 
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
             "upstream_model": app_settings.upstream_model,
             "adapter_cache_size": app_settings.adapter_cache_size,
             "adapter_cache_ttl_seconds": app_settings.adapter_cache_ttl_seconds,
+            "debug_async": app_settings.debug_async,
         }
 
     @app.get("/v1/models")
@@ -89,7 +91,7 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
                 image_size=image_size,
                 settings=app_settings,
             )
-            write_debug_record(
+            schedule_debug_record(
                 app_settings,
                 request_body,
                 outbound_payload,
@@ -109,7 +111,7 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
             raise HTTPException(status_code=502, detail=detail) from exc
         except Exception as exc:
             if outbound_payload is not None and task is not None:
-                write_debug_record(
+                schedule_debug_record(
                     app_settings,
                     request_body,
                     outbound_payload,
@@ -125,6 +127,18 @@ def create_app(settings: Settings | None = None, upstream_caller: UpstreamCaller
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return app
+
+
+def schedule_debug_record(settings: Settings, *args: Any, **kwargs: Any) -> None:
+    if settings.debug_dir is None:
+        return
+    if not settings.debug_async:
+        write_debug_record(settings, *args, **kwargs)
+        return
+    try:
+        asyncio.create_task(asyncio.to_thread(write_debug_record, settings, *args, **kwargs))
+    except RuntimeError:
+        write_debug_record(settings, *args, **kwargs)
 
 
 app = create_app()

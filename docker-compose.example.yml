@@ -41,6 +41,7 @@ services:
       ADAPTER_CACHE_SIZE: "256"
       ADAPTER_CACHE_TTL_SECONDS: "3600"
       ADAPTER_COALESCE_REQUESTS: "true"
+      ADAPTER_DEBUG_ASYNC: "true"
     expose:
       - "18000"
 

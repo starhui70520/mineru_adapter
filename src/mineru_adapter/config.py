@@ -53,6 +53,7 @@ class Settings:
     adapter_cache_size: int = DEFAULT_ADAPTER_CACHE_SIZE
     adapter_cache_ttl_seconds: float = DEFAULT_ADAPTER_CACHE_TTL_SECONDS
     adapter_coalesce_requests: bool = True
+    debug_async: bool = True
     debug_dir: Path | None = None
 
     @classmethod
@@ -75,5 +76,6 @@ class Settings:
             adapter_cache_size=_int_env("ADAPTER_CACHE_SIZE", DEFAULT_ADAPTER_CACHE_SIZE),
             adapter_cache_ttl_seconds=float(os.getenv("ADAPTER_CACHE_TTL_SECONDS", str(DEFAULT_ADAPTER_CACHE_TTL_SECONDS))),
             adapter_coalesce_requests=_bool_env("ADAPTER_COALESCE_REQUESTS", True),
+            debug_async=_bool_env("ADAPTER_DEBUG_ASYNC", True),
             debug_dir=Path(debug_dir) if debug_dir else None,
         )

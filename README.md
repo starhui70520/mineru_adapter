@@ -129,6 +129,7 @@ Adapter 配置：
 | `ADAPTER_CACHE_SIZE` | `256` | adapter 内存响应缓存最大条数；设为 `0` 可关闭 |
 | `ADAPTER_CACHE_TTL_SECONDS` | `3600` | adapter 内存响应缓存过期时间，单位秒；设为 `0` 可关闭 |
 | `ADAPTER_COALESCE_REQUESTS` | `true` | 是否合并并发的相同上游请求，避免同一页同一任务重复打模型 |
+| `ADAPTER_DEBUG_ASYNC` | `true` | 是否后台线程异步写 debug JSON，避免调试日志阻塞响应 |
 | `ADAPTER_DEBUG_DIR` | 空 | 调试记录输出目录 |
 
 默认参数代理配置：

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi.testclient import TestClient
 
-from mineru_adapter.api import create_app
+import mineru_adapter.api as api
+from mineru_adapter.api import create_app, schedule_debug_record
 from mineru_adapter.config import Settings
 
 
@@ -55,3 +57,35 @@ def test_chat_completion_rewrites_layout_response() -> None:
     assert response.json()["choices"][0]["message"]["content"] == (
         "<|box_start|>10 20 30 40<|box_end|><|ref_start|>title<|ref_end|><|rotate_up|>"
     )
+
+
+def test_schedule_debug_record_sync(monkeypatch, tmp_path) -> None:
+    calls: list[tuple[Any, ...]] = []
+
+    def fake_write_debug_record(*args: Any, **kwargs: Any) -> None:
+        calls.append(args)
+
+    monkeypatch.setattr(api, "write_debug_record", fake_write_debug_record)
+
+    schedule_debug_record(Settings(debug_dir=tmp_path, debug_async=False), "request")
+
+    assert len(calls) == 1
+    assert calls[0][1] == "request"
+
+
+def test_schedule_debug_record_async(monkeypatch, tmp_path) -> None:
+    async def scenario() -> None:
+        calls: list[tuple[Any, ...]] = []
+
+        def fake_write_debug_record(*args: Any, **kwargs: Any) -> None:
+            calls.append(args)
+
+        monkeypatch.setattr(api, "write_debug_record", fake_write_debug_record)
+
+        schedule_debug_record(Settings(debug_dir=tmp_path, debug_async=True), "request")
+        await asyncio.sleep(0.05)
+
+        assert len(calls) == 1
+        assert calls[0][1] == "request"
+
+    asyncio.run(scenario())
