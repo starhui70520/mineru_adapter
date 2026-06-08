@@ -72,24 +72,25 @@ TASK_PROMPTS: dict[MinerUTask, str] = {
 
 
 def extract_text_from_messages(messages: list[dict[str, Any]]) -> str:
-    chunks: list[str] = []
+    return "\n".join(_iter_text_parts(messages))
+
+
+def _iter_text_parts(messages: list[dict[str, Any]]):
     for message in messages:
         content = message.get("content")
         if isinstance(content, str):
-            chunks.append(content)
+            yield content
         elif isinstance(content, list):
             for part in content:
                 if isinstance(part, dict) and part.get("type") == "text":
                     text = part.get("text")
                     if isinstance(text, str):
-                        chunks.append(text)
-    return "\n".join(chunks)
+                        yield text
 
 
 def detect_task(messages: list[dict[str, Any]]) -> MinerUTask:
-    text = extract_text_from_messages(messages)
     for task, marker in TASK_MARKERS.items():
-        if marker in text:
+        if any(marker in text for text in _iter_text_parts(messages)):
             return task
     return MinerUTask.unknown
 

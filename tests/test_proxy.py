@@ -8,7 +8,7 @@ import json
 from PIL import Image
 from mineru_adapter import proxy as proxy_module
 from mineru_adapter.config import Settings
-from mineru_adapter.messages import MinerUTask, downsample_data_url_images
+from mineru_adapter.messages import MinerUTask, detect_task, downsample_data_url_images, extract_text_from_messages
 from mineru_adapter.proxy import build_upstream_payload, rewrite_upstream_response, write_debug_record
 
 
@@ -59,6 +59,21 @@ def test_build_upstream_payload_can_keep_upstream_thinking_enabled() -> None:
     )
 
     assert "chat_template_kwargs" not in payload
+
+
+def test_detect_task_keeps_marker_priority_without_joining_semantics() -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Text Recognition:"},
+                {"type": "text", "text": "Layout Detection:"},
+            ],
+        }
+    ]
+
+    assert extract_text_from_messages(messages) == "Text Recognition:\nLayout Detection:"
+    assert detect_task(messages) == MinerUTask.layout
 
 
 def test_build_upstream_payload_skips_image_size_for_non_layout(monkeypatch) -> None:
